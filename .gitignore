@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# 비밀 정보 — 절대 올리지 않기
+.env
+
+# 실행 중 생기는 데이터 (원본은 data/sample_profiles.json)
+data/profiles.json
+data/social.json
+data/profiles_보류.json
+data/backups/
+data/photos/
+*.tmp
+
+# 편집기
+.vscode/
+.idea/
+.DS_Store
