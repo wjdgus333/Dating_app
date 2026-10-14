@@ -4,8 +4,9 @@ seed(문자열)가 같으면 항상 같은 캐릭터가 나오고, seed를 바�
 외부 서비스·인터넷 없이 동작하며, 머리 모양·머리색·피부·눈·표정·안경·볼터치·옷 색을 랜덤 조합한다.
 """
 
-import hashlib
 import random
+
+from .embedding import fnv1a
 
 BACKGROUNDS = ["#FFE3E8", "#E3F0FF", "#E8F8EC", "#FFF4D6", "#EFE6FF", "#FFE9D9", "#DDF6F6", "#F3F0EA"]
 SKINS = ["#FFE0C7", "#F9D3B4", "#F1C29E", "#E4AE85", "#C98E66", "#A86F4C"]
@@ -15,8 +16,26 @@ EYES = ["#3B2A20", "#5A3E2B", "#2E4C7A", "#3D6B4F", "#6B3D7A", "#7A4A2E"]
 SHIRTS = ["#F2476B", "#5B8DEF", "#47B881", "#F5A623", "#9B6CF0", "#2EC4B6", "#EF7A5B", "#3A4A6B"]
 
 
-def _rng(seed: str) -> random.Random:
-    return random.Random(int(hashlib.sha256(seed.encode()).hexdigest()[:16], 16))
+class _Rng:
+    """mulberry32 난수. 웹 버전(local-api.js)과 똑같은 순서로 같은 값이 나와서 같은 캐릭터가 그려진다."""
+
+    def __init__(self, seed: str):
+        self.a = fnv1a(seed)
+
+    def random(self) -> float:
+        m = 0xFFFFFFFF
+        self.a = (self.a + 0x6D2B79F5) & m
+        a = self.a
+        t = ((a ^ (a >> 15)) * (1 | a)) & m
+        t = ((t + (((t ^ (t >> 7)) * (61 | t)) & m)) & m) ^ t
+        return ((t ^ (t >> 14)) & m) / 4294967296
+
+    def choice(self, items):
+        return items[int(self.random() * len(items))]
+
+
+def _rng(seed: str) -> _Rng:
+    return _Rng(seed)
 
 
 def _hair_back(style: str, color: str) -> str:

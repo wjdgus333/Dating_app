@@ -27,7 +27,7 @@ def compare(first: ScoreResult, second: ScoreResult) -> dict:
     a = {c.key: c for c in first.categories}
     b = {c.key: c for c in second.categories}
     items = []
-    for key in set(a) | set(b):
+    for key in dict.fromkeys([*a, *b]):  # 순서를 고정 (웹 버전과 같은 결과)
         ca, cb = a.get(key), b.get(key)
         diff = (ca.contribution if ca else 0) - (cb.contribution if cb else 0)
         weight = (ca or cb).weight

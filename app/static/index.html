@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>소개팅 매칭</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="static/style.css">
 </head>
 <body>
 <header class="topbar">
@@ -105,6 +105,10 @@
     </section>
 
     <div class="sidebar-actions">
+      <div id="webBackup" class="web-backup" hidden>
+        <button type="button" id="exportData" class="btn soft">💾 내 데이터 백업 파일 받기</button>
+        <label class="btn ghost">📂 백업 파일 불러오기<input type="file" accept=".json,application/json" id="importData" hidden></label>
+      </div>
       <div id="saveStatus" class="save-status">설정을 바꾸면 자동으로 저장돼요</div>
       <div id="dataStatus" class="data-status"></div>
       <button id="reset" class="btn ghost">가상 데이터로 되돌리기 (자동 백업)</button>
@@ -165,6 +169,6 @@
 </div>
 
 <div id="toast" class="toast" hidden></div>
-<script src="/static/app.js"></script>
+<script src="static/app.js"></script>
 </body>
 </html>

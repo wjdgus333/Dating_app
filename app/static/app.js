@@ -17,7 +17,11 @@ const GRADIENTS = [
   ["#3a86ff", "#64c4ff"], ["#e056a0", "#f78fb3"], ["#2ec4b6", "#3a86ff"], ["#8e7dff", "#f2476b"],
 ];
 
+// 웹 버전(GitHub Pages)에서는 local-api.js가 서버 역할을 한다.
+const WEB = !!window.LOCAL_API;
+
 async function api(path, options = {}) {
+  if (WEB) return window.LOCAL_API.handle(path, options);
   const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
   const data = await res.json();
   if (!res.ok) {
@@ -39,6 +43,7 @@ function toast(msg) {
 
 // 프로필 사진: 올린 사진 또는 애니메이션 캐릭터. 못 불러오면 이니셜이 보인다.
 function photoUrl(p) {
+  if (WEB) return window.LOCAL_API.photoUrl(p);
   return `/api/profiles/${p.id}/photo?v=${encodeURIComponent(p.photo || "auto")}`;
 }
 
@@ -754,6 +759,7 @@ async function init() {
   OPT = await api("/api/options");
 
   setupSocial();
+  if (WEB) setupWebMode();
   $("#quit").addEventListener("click", async () => {
     if (!confirm("서버를 종료할까요? 다시 쓰려면 터미널에서 다시 실행해야 해요.")) return;
     try {
@@ -810,7 +816,9 @@ async function savePreferences() {
 
 async function loadDataStatus() {
   const s = await api("/api/data-status");
-  $("#dataStatus").textContent = `저장 위치: ${s.data_dir} · 백업 ${s.backups}개`;
+  $("#dataStatus").textContent = s.web
+    ? "웹 버전: 데이터는 이 브라우저에만 저장돼요 (다른 기기·브라우저와 따로)"
+    : `저장 위치: ${s.data_dir} · 백업 ${s.backups}개`;
   if (s.repair_notes.length) toast(`예전 데이터 ${s.repair_notes.length}건을 새 형식에 맞게 정리했어요 (원본은 백업됨)`);
 }
 
@@ -829,3 +837,31 @@ function rememberUser(id) {
 }
 
 init();
+
+// ── 웹 버전 전용: 종료·AI 설명 숨기기, 백업 파일 받기/불러오기 ──
+function setupWebMode() {
+  $("#quit").hidden = true; // 끌 서버가 없음
+  $("#useLlm").closest("label").hidden = true; // API 키를 브라우저에 둘 수 없음
+  $("#webBackup").hidden = false;
+  $("#exportData").addEventListener("click", () => {
+    const blob = new Blob([window.LOCAL_API.exportData()], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `소개팅앱-백업-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  $("#importData").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!confirm("백업 파일로 지금 데이터를 바꿀까요? (지금 상태는 이 브라우저에 1개 보관돼요)")) return;
+    try {
+      const n = window.LOCAL_API.importData(await file.text());
+      await loadProfiles(lastUserId());
+      toast(`백업에서 ${n}명을 불러왔어요`);
+    } catch (err) {
+      toast(err.message);
+    }
+    e.target.value = "";
+  });
+}

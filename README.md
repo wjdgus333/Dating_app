@@ -18,9 +18,35 @@
 [추천] → ♥ 좋아요 → 서로 좋아요 = 매칭 → 💬 채팅
 ```
 
+**👉 바로 써 보기: https://wjdgus333.github.io/Dating_app/** (설치 없이 브라우저에서 열려요)
+
 ---
 
-## 빠른 실행
+## 웹 버전 (GitHub Pages)
+
+위 주소는 서버 없이 **브라우저 안에서** 돌아가는 버전입니다.
+
+- 매칭 엔진을 JavaScript로 옮긴 [local-api.js](app/static/local-api.js)가 서버 역할을 합니다. 화면(app.js)은 서버 버전과 같습니다.
+- 결과는 Python 버전과 **똑같습니다.** 같은 규칙·같은 해시(FNV-1a)·같은 난수(mulberry32)를 쓰고, 샘플 60명 × (일반·쌍방·조건 변경) 181가지 추천 결과와 문장 해석·캐릭터 그림을 비교해 차이가 0건인 것을 확인했습니다([scripts/parity_reference.py](scripts/parity_reference.py)).
+- 데이터는 **접속한 사람의 브라우저(localStorage)에 저장**됩니다. 새로고침하거나 다시 들어와도 남아 있고, 다른 기기·브라우저와는 따로입니다.
+- 브라우저 데이터를 지우면 사라지니, 왼쪽 아래 **💾 내 데이터 백업 파일 받기**로 저장해 두고 **📂 백업 파일 불러오기**로 되돌릴 수 있습니다(사진 포함).
+- 웹 버전에는 서버 종료 버튼과 AI 설명(API 키 필요)이 없습니다.
+
+### 웹 버전 업데이트하기
+
+화면·설정·샘플 데이터를 바꾼 뒤:
+
+```bash
+.venv\Scripts\python scripts/build_pages.py
+```
+
+`docs/` 폴더가 새로 만들어집니다. 커밋·푸시하면 1~2분 뒤 위 주소에 반영됩니다. (`pytest`에 docs/가 오래되면 알려 주는 테스트가 있습니다.)
+
+처음 한 번만: 깃허브 저장소 **Settings → Pages → Build and deployment**에서 Source **Deploy from a branch**, Branch **main**, 폴더 **/docs** 를 고르고 Save.
+
+---
+
+## 빠른 실행 (Python 서버 버전)
 
 Python 3.10 이상이 필요합니다.
 
@@ -269,7 +295,7 @@ LLM에는 이름이나 회사 같은 개인정보를 보내지 않고 **공통�
 ```
 ├── app/
 │   ├── main.py            FastAPI 서버 (API + 웹 화면)
-│   └── static/            웹 화면 (HTML/CSS/JS)
+│   └── static/            웹 화면 (HTML/CSS/JS) + local-api.js(웹 버전용 엔진)
 ├── matcher/
 │   ├── config.py          선택지 · 점수 항목 · 중요도 단계 · 기준값  ← 바꾸고 싶으면 여기부터
 │   ├── models.py          프로필 · 선호 설정 (필수 항목 검증)
@@ -291,7 +317,10 @@ LLM에는 이름이나 회사 같은 개인정보를 보내지 않고 **공통�
 │   └── sample_social.json     샘플 좋아요 · 대화
 ├── scripts/
 │   ├── demo.py              터미널 데모
-│   └── generate_profiles.py 랜덤 가상 프로필 만들기
+│   ├── generate_profiles.py 랜덤 가상 프로필 만들기
+│   ├── build_pages.py       웹 버전(docs/) 만들기
+│   └── parity_reference.py  웹 버전과 Python 결과 비교용 기준값
+├── docs/                    GitHub Pages 웹 버전 (build_pages.py가 만듦)
 └── tests/                 pytest
 ```
 

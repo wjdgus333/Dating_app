@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>소개팅 매칭</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">♥</span> 소개팅 매칭</div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="match">추천</button>
+    <button class="tab" data-tab="chat">채팅 <span id="chatBadge" class="tab-badge" hidden></span></button>
+    <button class="tab" data-tab="signup">프로필 등록</button>
+  </nav>
+  <button id="quit" class="quit-btn" title="서버 종료" aria-label="서버 종료">⏻<span>종료</span></button>
+</header>
+
+<main id="view-match" class="layout">
+  <!-- 왼쪽: 내 설정 -->
+  <aside class="sidebar">
+    <section class="card me-card">
+      <label class="field-label" for="user">누구 기준으로 볼까요?</label>
+      <select id="user" class="select"></select>
+      <div id="meSummary" class="me-summary"></div>
+      <div class="toggles">
+        <label class="switch"><input type="checkbox" id="mutual"><span></span>쌍방 모드</label>
+        <label class="switch"><input type="checkbox" id="useLlm"><span></span>AI 설명</label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">
+        <h2>거르기</h2>
+        <span class="hint">하나라도 걸리면 점수와 상관없이 탈락</span>
+      </div>
+      <div id="dealbreakers" class="chips"></div>
+
+      <div class="subsection">
+        <h3>문장으로 적기</h3>
+        <textarea id="dbText" rows="3" placeholder="예) 담배 피우는 사람은 싫어요. 술 자주 마시는 사람도 별로고, 게임 좋아하는 사람은 패스. 27살 이상이었으면 좋겠어요."></textarea>
+        <button id="dbParse" class="btn soft">조건 만들기</button>
+        <div id="dbSuggest"></div>
+      </div>
+
+      <div class="subsection">
+        <h3>직접 고르기</h3>
+        <div class="db-builder">
+          <select id="dbField" class="select"></select>
+          <div id="dbOp" class="segmented small"></div>
+        </div>
+        <div id="dbValueWrap" class="chips pick"></div>
+        <button id="dbAdd" class="btn soft">＋ 조건 추가</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">
+        <h2>추가 점수</h2>
+        <span class="hint">이 조건에 해당하면 점수를 더 줘요</span>
+      </div>
+      <div id="bonusRules" class="chips"></div>
+      <div class="subsection">
+        <div class="db-builder">
+          <select id="bnField" class="select"></select>
+          <div id="bnOp" class="segmented small"></div>
+        </div>
+        <div id="bnValueWrap" class="chips pick"></div>
+        <div class="bonus-points">
+          <span class="field-label">추가 점수</span>
+          <div id="bnPoints" class="segmented"></div>
+        </div>
+        <button id="bnAdd" class="btn soft">＋ 추가 점수 규칙 넣기</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">
+        <h2>감점</h2>
+        <span class="hint">이 조건에 해당하면 점수를 빼요</span>
+      </div>
+      <div id="penaltyRules" class="chips"></div>
+      <div class="subsection">
+        <div class="db-builder">
+          <select id="pnField" class="select"></select>
+          <div id="pnOp" class="segmented small"></div>
+        </div>
+        <div id="pnValueWrap" class="chips pick"></div>
+        <div class="bonus-points">
+          <span class="field-label">감점</span>
+          <div id="pnPoints" class="segmented penalty"></div>
+        </div>
+        <button id="pnAdd" class="btn soft penalty-btn">− 감점 규칙 넣기</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">
+        <h2>중요도</h2>
+        <span class="hint">중요할수록 점수에 크게 반영</span>
+      </div>
+      <div id="weights" class="weights"></div>
+    </section>
+
+    <div class="sidebar-actions">
+      <div id="webBackup" class="web-backup" hidden>
+        <button type="button" id="exportData" class="btn soft">💾 내 데이터 백업 파일 받기</button>
+        <label class="btn ghost">📂 백업 파일 불러오기<input type="file" accept=".json,application/json" id="importData" hidden></label>
+      </div>
+      <div id="saveStatus" class="save-status">설정을 바꾸면 자동으로 저장돼요</div>
+      <div id="dataStatus" class="data-status"></div>
+      <button id="reset" class="btn ghost">가상 데이터로 되돌리기 (자동 백업)</button>
+    </div>
+  </aside>
+
+  <!-- 오른쪽: 결과 -->
+  <section id="result" class="results"></section>
+</main>
+
+<main id="view-chat" class="layout chat-layout" hidden>
+  <aside class="sidebar">
+    <section class="card">
+      <label class="field-label" for="chatUser">지금 누구로 접속해 있나요? (로그인 대신)</label>
+      <select id="chatUser" class="select"></select>
+    </section>
+    <section class="card">
+      <div class="card-title"><h2>받은 좋아요</h2><span class="hint">좋아요를 돌려주면 매칭돼요</span></div>
+      <div id="received"></div>
+    </section>
+    <section class="card">
+      <div class="card-title"><h2>매칭</h2><span class="hint">서로 좋아요를 누른 사람</span></div>
+      <div id="matches"></div>
+    </section>
+  </aside>
+  <section class="card chat-room" id="chatRoom">
+    <div class="chat-empty">왼쪽에서 매칭된 사람을 골라 대화를 시작해 보세요.</div>
+  </section>
+</main>
+
+<div id="likeModal" class="modal" hidden>
+  <div class="modal-card">
+    <h2 id="likeTitle">좋아요 보내기</h2>
+    <p class="meta">한마디를 함께 보내면 상대가 받은 좋아요에서 볼 수 있어요. 서로 좋아요를 누르면 채팅방이 열려요.</p>
+    <textarea id="likeMessage" rows="3" maxlength="500" placeholder="예) 등산 좋아하신다고 해서요! 어느 산 자주 가세요?"></textarea>
+    <div class="modal-actions">
+      <button id="likeCancel" class="btn ghost">취소</button>
+      <button id="likeSend" class="btn primary">♥ 좋아요 보내기</button>
+    </div>
+  </div>
+</div>
+
+<main id="view-signup" class="layout single" hidden>
+  <section class="card signup-card">
+    <div class="card-title">
+      <h2>프로필 등록</h2>
+      <span class="hint"><b class="req">*</b> 표시는 필수예요</span>
+    </div>
+    <form id="signup" class="signup"></form>
+    <p id="signupMsg"></p>
+  </section>
+</main>
+
+<div id="byeScreen" class="bye" hidden>
+  <div class="logo big">♥</div>
+  <h1>서버를 종료했어요</h1>
+  <p class="meta">이 창은 닫아도 돼요. 다시 실행하려면 터미널에서<br><code>.venv\Scripts\python -m uvicorn app.main:app --reload</code></p>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<script src="static/local-api.js"></script>
+<script src="static/app.js"></script>
+</body>
+</html>

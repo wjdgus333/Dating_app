@@ -63,30 +63,7 @@ def index():
 @app.get("/api/options")
 def options():
     """화면에서 쓸 선택지 목록."""
-    return {
-        "genders": C.GENDERS,
-        "education": C.EDUCATION,
-        "smoking": C.SMOKING,
-        "drinking": C.DRINKING,
-        "exercise": C.EXERCISE,
-        "religion": C.RELIGION,
-        "contact_frequency": C.CONTACT_FREQUENCY,
-        "date_style": C.DATE_STYLES,
-        "relationship_goal": C.RELATIONSHIP_GOALS,
-        "regions": C.REGIONS,
-        "interests": C.INTERESTS,
-        "score_categories": {k: {"label": v[0], "logic": v[2]} for k, v in C.SCORE_CATEGORIES.items()},
-        "importance_levels": C.IMPORTANCE_LEVELS,
-        "dealbreaker_fields": {
-            k: {"label": v[0], "ops": v[1], "choices": C.DEALBREAKER_CHOICES.get(k, [])}
-            for k, v in C.DEALBREAKER_FIELDS.items()
-        },
-        "bonus_fields": {
-            k: {"label": v[0], "ops": v[1], "choices": C.DEALBREAKER_CHOICES.get(k, [])} for k, v in C.BONUS_FIELDS.items()
-        },
-        "bonus_points": C.BONUS_POINTS,
-        "default_weight": C.DEFAULT_WEIGHT,
-    }
+    return C.options_payload()
 
 
 @app.get("/api/profiles", response_model=list[Profile])

@@ -8,11 +8,19 @@
   EMBEDDER=sbert 로 켜면 진짜 의미 기반 임베딩(multilingual-e5-small)을 쓴다.
 """
 
-import hashlib
 import math
 import os
 from collections import Counter
 from functools import lru_cache
+
+
+def fnv1a(text: str) -> int:
+    """FNV-1a 32비트 해시. 웹 버전(local-api.js)에서도 똑같이 계산할 수 있어서 결과가 일치한다."""
+    h = 0x811C9DC5
+    for b in text.encode("utf-8"):
+        h ^= b
+        h = (h * 0x01000193) & 0xFFFFFFFF
+    return h
 
 
 class HashingEmbedder:
@@ -27,7 +35,7 @@ class HashingEmbedder:
     def _embed_one(self, text: str) -> list[float]:
         vec = [0.0] * self.dim
         for gram, count in self._ngrams(text).items():
-            idx = int(hashlib.md5(gram.encode()).hexdigest(), 16) % self.dim
+            idx = fnv1a(gram) % self.dim
             vec[idx] += 1 + math.log(count)
         return _normalize(vec)
 
