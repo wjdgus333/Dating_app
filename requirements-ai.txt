@@ -1,0 +1,5 @@
+# 선택 설치: 의미 기반 임베딩 + LLM 설명
+#   pip install -r requirements-ai.txt
+#   EMBEDDER=sbert, ANTHROPIC_API_KEY=... 환경변수 설정 (.env.example 참고)
+sentence-transformers>=3.0
+anthropic>=0.70
