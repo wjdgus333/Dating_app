@@ -512,7 +512,6 @@ def test_web_version_is_up_to_date(tmp_path):
     fresh = build_pages.build(tmp_path / "docs")
     for name in ("index.html", "static/app.js", "static/style.css", "static/local-api.js", "static/web-data.json", ".nojekyll"):
         assert filecmp.cmp(fresh / name, root / "docs" / name, shallow=False), f"docs/{name} 가 오래됐어요 → python scripts/build_pages.py"
-    # 저장소 맨 위 index.html (Pages 설정이 root여도 앱이 바로 열리게)
-    expected = (root / "docs" / "index.html").read_text(encoding="utf-8").replace('"static/', '"docs/static/')
-    assert (root / "index.html").read_text(encoding="utf-8") == expected, "index.html 이 오래됐어요 → python scripts/build_pages.py"
+    # 저장소 맨 위 index.html: 앱 전체가 든 한 파일 (원카드처럼 이 파일 하나로 열림)
+    assert (root / "index.html").read_text(encoding="utf-8") == build_pages.standalone_html(fresh), "index.html 이 오래됐어요 → python scripts/build_pages.py"
     assert (root / ".nojekyll").exists()

@@ -953,8 +953,8 @@
 
   // ── 시작: 설정·샘플 불러오고, 이 브라우저에 저장된 데이터가 있으면 그걸 쓴다 ──
   const ready = (async () => {
-    const res = await fetch(`${BASE}static/web-data.json`);
-    const data = await res.json();
+    // 한 파일 버전(index.html 하나)은 데이터가 페이지 안에 들어 있다(window.WEB_DATA). 없으면 파일에서 읽는다.
+    const data = window.WEB_DATA || (await (await fetch(`${BASE}static/web-data.json`)).json());
     CFG = data.config;
     SAMPLE = { profiles: data.sample_profiles, social: data.sample_social };
     const stored = load(KEY.profiles);

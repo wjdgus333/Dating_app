@@ -89,14 +89,35 @@ def build(out: Path = DOCS) -> Path:
     return out
 
 
-def build_root_entry(root: Path = ROOT) -> Path:
-    """저장소 맨 위 index.html — Pages 설정이 '/(root)'여도 README 대신 앱이 바로 열리게 한다.
+def standalone_html(docs: Path = DOCS) -> str:
+    """앱 전체(화면·CSS·엔진·샘플 데이터)를 index.html 한 파일에 담는다.
 
-    docs/index.html 과 같은 화면을 쓰되, 파일 경로만 docs/static/… 으로 바꾼다.
-    (.nojekyll: 깃허브가 README를 웹페이지로 바꾸는 처리를 하지 않게 하는 표시)
+    원카드 게임처럼 저장소 맨 위에 이 파일 하나만 있으면 주소를 치는 순간 바로 열린다.
+    다른 파일·폴더 구조·숨김 파일(.nojekyll)이 없어도 동작한다.
     """
-    html = (DOCS / "index.html").read_text(encoding="utf-8").replace('"static/', '"docs/static/')
-    (root / "index.html").write_text(html, encoding="utf-8")
+    html = (docs / "index.html").read_text(encoding="utf-8")
+    css = (docs / "static" / "style.css").read_text(encoding="utf-8")
+    data = (docs / "static" / "web-data.json").read_text(encoding="utf-8").replace("</", "<\\/")
+    engine = (docs / "static" / "local-api.js").read_text(encoding="utf-8")
+    app = (docs / "static" / "app.js").read_text(encoding="utf-8")
+
+    def swap(tag: str, new: str):
+        nonlocal html
+        assert tag in html, f"index.html 에서 {tag} 를 찾지 못했어요"
+        html = html.replace(tag, new)
+
+    swap('<link rel="stylesheet" href="static/style.css">', f"<style>\n{css}\n</style>")
+    swap('<script src="static/local-api.js"></script>', f"<script>window.WEB_DATA = {data};</script>\n<script>\n{engine}\n</script>")
+    swap('<script src="static/app.js"></script>', f"<script>\n{app}\n</script>")
+    return html
+
+
+def build_root_entry(root: Path = ROOT) -> Path:
+    """저장소 맨 위 index.html — 한 파일짜리 앱. Pages 설정이 '/(root)'면 README 대신 이게 열린다.
+
+    (.nojekyll: 깃허브가 README를 웹페이지로 바꾸는 처리를 하지 않게 하는 표시. 없어도 index.html은 그대로 열린다.)
+    """
+    (root / "index.html").write_text(standalone_html(), encoding="utf-8")
     (root / ".nojekyll").write_text("", encoding="utf-8")
     return root / "index.html"
 
