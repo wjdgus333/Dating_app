@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -22,16 +22,22 @@ from matcher.envfile import load_env
 load_env()  # .env 의 MATCH_DATA_DIR 등을 저장소보다 먼저 읽어야 한다.
 
 from matcher import config as C  # noqa: E402
-from matcher import textrules  # noqa: E402
-from matcher.avatar import avatar_svg, new_seed  # noqa: E402
-from matcher.models import Dealbreaker, Preferences, Profile, ProfileCreate  # noqa: E402
+from matcher import service  # noqa: E402
+from matcher.avatar import avatar_svg  # noqa: E402
+from matcher.models import Preferences, Profile, ProfileCreate  # noqa: E402
 from matcher.pipeline import recommend  # noqa: E402
-from matcher.social import MAX_MESSAGE, SocialError, SocialStore  # noqa: E402
+from matcher.social import MAX_MESSAGE, SocialStore  # noqa: E402
 from matcher.store import ProfileStore  # noqa: E402
 
 STATIC = Path(__file__).parent / "static"
 
 app = FastAPI(title="소개팅 매칭 API", version="0.1.0")
+
+
+@app.exception_handler(service.ServiceError)
+async def service_error(request: Request, exc: service.ServiceError):
+    """공통 로직(matcher/service.py)의 오류를 화면이 읽는 형식({"detail": ...})으로 바꾼다."""
+    return JSONResponse({"detail": str(exc)}, status_code=exc.status)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -115,10 +121,7 @@ class ParseRequest(BaseModel):
 @app.post("/api/dealbreakers/parse")
 def parse_dealbreakers(req: ParseRequest):
     """문장 → 절대조건 후보. 바로 적용하지 않고 후보만 돌려준다."""
-    result = textrules.parse(req.text)
-    for rule in result["rules"]:
-        rule["text"] = Dealbreaker(**{k: rule[k] for k in ("field", "op", "value")}).describe()
-    return result
+    return service.parse_dealbreakers(req.text)
 
 
 # ── 좋아요 · 매칭 · 채팅 ───────────────────────────────────
@@ -142,21 +145,7 @@ class BlockRequest(BaseModel):
 
 
 def _user(user_id: int) -> Profile:
-    p = store.get(user_id)
-    if not p:
-        raise HTTPException(404, "프로필을 찾을 수 없습니다.")
-    return p
-
-
-def _card(p: Profile) -> dict:
-    return {
-        "id": p.id,
-        "name": p.display_name,
-        "age": p.age,
-        "region": f"{p.city} {p.district or ''}".strip(),
-        "occupation": p.occupation,
-        "photo": p.photo,
-    }
+    return service.user(store, user_id)
 
 
 # ── 프로필 사진 ─────────────────────────────────────────────
@@ -184,8 +173,7 @@ def get_photo(profile_id: int):
     if p.photo == "upload" and (f := _photo_file(profile_id)):
         media = next(m for ext, m in PHOTO_TYPES.values() if f.suffix == f".{ext}")
         return FileResponse(f, media_type=media, headers={"Cache-Control": "no-cache"})
-    seed = p.photo.split(":", 1)[1] if p.photo and p.photo.startswith("avatar:") else f"{p.id}-{p.name}"
-    return Response(avatar_svg(seed, p.gender), media_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
+    return Response(avatar_svg(service.avatar_seed(p), p.gender), media_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
 
 
 @app.put("/api/profiles/{profile_id}/photo", response_model=Profile)
@@ -213,69 +201,34 @@ def shuffle_avatar(profile_id: int):
     _user(profile_id)
     if old := _photo_file(profile_id):
         old.unlink()
-    return store.update_photo(profile_id, f"avatar:{new_seed()}")
+    return service.shuffle_avatar(store, profile_id)
 
 
 @app.post("/api/likes")
 def send_like(req: LikeRequest):
-    me, other = _user(req.from_id), _user(req.to_id)
-    if other.id in me.preferences.blocked_ids or me.id in other.preferences.blocked_ids:
-        raise HTTPException(400, "차단된 사용자예요.")
-    try:
-        return social.like(me.id, other.id, req.message)
-    except SocialError as e:
-        raise HTTPException(400, str(e))
+    return service.like(store, social, req.from_id, req.to_id, req.message)
 
 
 @app.get("/api/users/{user_id}/inbox")
 def inbox(user_id: int):
     """받은 좋아요 · 매칭 목록 · 보낸 좋아요."""
-    _user(user_id)
-    likes = social.likes_of(user_id)
-    # 프로필이 보류(읽을 수 없음) 상태인 사람은 목록에서만 빼고, 좋아요·대화 기록은 지우지 않는다.
-    received = [
-        {**_card(store.get(l["from"])), "message": l["message"], "at": l["at"]}
-        for l in likes["received"]
-        if store.get(l["from"])
-    ]
-    matches = []
-    for other_id in social.matches_of(user_id):
-        if not store.get(other_id):
-            continue
-        last = social.last_message(user_id, other_id)
-        matches.append({**_card(store.get(other_id)), "last": last, "unread": social.unread_count(user_id, other_id)})
-    matches.sort(key=lambda m: m["last"]["at"] if m["last"] else "", reverse=True)
-    return {"received": received, "matches": matches, "sent": likes["sent"]}
+    return service.inbox(store, social, user_id)
 
 
 @app.get("/api/chats/{user_id}/{other_id}")
 def get_messages(user_id: int, other_id: int):
-    _user(user_id)
-    other = _user(other_id)
-    try:
-        return {"with": _card(other), "messages": social.messages(user_id, other_id)}
-    except SocialError as e:
-        raise HTTPException(403, str(e))
+    return service.messages(store, social, user_id, other_id)
 
 
 @app.post("/api/chats/{other_id}")
 def send_message(other_id: int, req: MessageRequest):
-    _user(req.sender_id)
-    _user(other_id)
-    try:
-        return social.send(req.sender_id, other_id, req.text)
-    except SocialError as e:
-        raise HTTPException(403, str(e))
+    return service.send_message(store, social, req.sender_id, other_id, req.text)
 
 
 @app.post("/api/block", response_model=Profile)
 def block(req: BlockRequest):
     """차단: 좋아요·대화를 지우고, 서로 추천에서도 빠지게 한다."""
-    me = _user(req.user_id)
-    _user(req.target_id)
-    blocked = sorted(set(me.preferences.blocked_ids) | {req.target_id})
-    social.unmatch(req.user_id, req.target_id)
-    return store.update_preferences(me.id, me.preferences.model_copy(update={"blocked_ids": blocked}))
+    return service.block(store, social, req.user_id, req.target_id)
 
 
 @app.post("/api/shutdown")

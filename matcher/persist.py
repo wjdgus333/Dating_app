@@ -34,7 +34,10 @@ def write_json(path: Path, data) -> None:
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.flush()
-        os.fsync(f.fileno())
+        try:
+            os.fsync(f.fileno())
+        except (OSError, AttributeError):  # 브라우저(Pyodide) 가상 파일 시스템 등에서는 필요 없음
+            pass
     os.replace(tmp, path)
 
 

@@ -515,3 +515,67 @@ def test_web_version_is_up_to_date(tmp_path):
     # 저장소 맨 위 index.html: 앱 전체가 든 한 파일 (원카드처럼 이 파일 하나로 열림)
     assert (root / "index.html").read_text(encoding="utf-8") == build_pages.standalone_html(fresh), "index.html 이 오래됐어요 → python scripts/build_pages.py"
     assert (root / ".nojekyll").exists()
+
+
+# ── Pyodide 버전 (브라우저 안 Python) ─────────────────────
+@pytest.fixture
+def web_api(tmp_path, monkeypatch):
+    """web/pyodide_api.py 를 PC에서 그대로 돌려 본다 (브라우저에서도 같은 코드가 돈다)."""
+    from matcher import social as social_mod
+    from matcher import store as store_mod
+
+    monkeypatch.setattr(store_mod, "DB_PATH", tmp_path / "profiles.json")
+    monkeypatch.setattr(social_mod, "DB_PATH", tmp_path / "social.json")
+    from web import pyodide_api
+
+    pyodide_api.start()
+    return pyodide_api
+
+
+def _call(api, method, path, body=None):
+    import json
+
+    return json.loads(api.handle(method, path, json.dumps(body) if body is not None else ""))
+
+
+def test_pyodide_api_matches_fastapi(web_api, client):
+    for method, path, body in [
+        ("GET", "/api/options", None),
+        ("POST", "/api/recommend", {"user_id": 1}),
+        ("POST", "/api/recommend", {"user_id": 14, "mutual": True}),
+        ("GET", "/api/users/1/inbox", None),
+        ("GET", "/api/chats/3/16", None),
+        ("POST", "/api/dealbreakers/parse", {"text": "담배 피우는 사람은 싫어요. 25~33살"}),
+    ]:
+        web = _call(web_api, method, path, body)
+        server = client.request(method, path, json=body).json()
+        assert web["ok"] and web["data"] == server, path
+
+
+def test_pyodide_api_errors_are_korean(web_api):
+    res = _call(web_api, "POST", "/api/profiles", {"name": "홍길동", "gender": "남성", "age": 300, "city": "서울"})
+    assert not res["ok"]
+    assert "• 최종학력: 필수 항목이에요" in res["error"] and "• 나이: 허용 범위를 벗어났어요" in res["error"]
+    res = _call(web_api, "POST", "/api/chats/12", {"sender_id": 1, "text": "안녕"})
+    assert res == {"ok": False, "error": "서로 좋아요를 눌러 매칭된 사람에게만 메시지를 보낼 수 있어요."}
+
+
+def test_pyodide_api_saves_to_files(web_api, tmp_path):
+    assert _call(web_api, "POST", "/api/likes", {"from_id": 1, "to_id": 11})["data"] == {"matched": True}
+    import json
+
+    likes = json.loads((tmp_path / "social.json").read_text(encoding="utf-8"))["likes"]
+    assert {"from": 1, "to": 11} in [{"from": l["from"], "to": l["to"]} for l in likes]
+
+
+def test_pyodide_single_file_is_up_to_date():
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(root / "scripts"))
+    import build_pyodide
+
+    assert (root / "web" / "dist" / "index.html").read_text(encoding="utf-8") == build_pyodide.build_html(), (
+        "web/dist/index.html 이 오래됐어요 → python scripts/build_pyodide.py"
+    )

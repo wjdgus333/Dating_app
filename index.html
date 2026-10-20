@@ -2353,7 +2353,7 @@ async function savePreferences() {
 async function loadDataStatus() {
   const s = await api("/api/data-status");
   $("#dataStatus").textContent = s.web
-    ? "웹 버전: 데이터는 이 브라우저에만 저장돼요 (다른 기기·브라우저와 따로)"
+    ? `웹 버전${s.engine ? ` · ${s.engine} 엔진` : ""}: 데이터는 이 브라우저에만 저장돼요 (다른 기기·브라우저와 따로)`
     : `저장 위치: ${s.data_dir} · 백업 ${s.backups}개`;
   if (s.repair_notes.length) toast(`예전 데이터 ${s.repair_notes.length}건을 새 형식에 맞게 정리했어요 (원본은 백업됨)`);
 }

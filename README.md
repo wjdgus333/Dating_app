@@ -22,7 +22,22 @@
 
 ---
 
-## 웹 버전 (GitHub Pages)
+## 웹 버전 2: 브라우저 안에서 Python 실행 (Pyodide)
+
+`web/dist/index.html` **한 파일**을 깃허브 저장소 맨 위에 올리고 Pages를 켜면, 주소만 쳐서 **`matcher/`의 Python 코드가 브라우저 안에서 그대로** 돌아갑니다.
+
+- [Pyodide](https://pyodide.org)(WebAssembly로 만든 Python)를 처음 열 때 jsDelivr에서 내려받습니다. **처음 한 번 5~15초** 걸리고, 그 뒤로는 브라우저가 캐시해서 빨라집니다.
+- 화면은 서버 버전과 같고, 요청은 [web/pyodide_api.py](web/pyodide_api.py)가 받아서 서버와 같은 공통 로직([matcher/service.py](matcher/service.py))으로 처리합니다.
+- PC의 Python과 결과가 같습니다: 181가지 추천 결과 차이 0건, FastAPI 서버와 응답 비교 테스트 포함.
+- 데이터는 Python 가상 파일에 저장된 뒤 브라우저 localStorage로 옮겨 적어서, 새로고침해도 남습니다. 웹 버전 1과 같은 주소(github.io)를 써도 데이터가 섞이지 않습니다(`dmpy.` 저장 이름).
+
+다시 만들기:
+
+```bash
+.venv\Scripts\python scripts/build_pyodide.py
+```
+
+## 웹 버전 1: JavaScript 엔진 (GitHub Pages)
 
 위 주소는 서버 없이 **브라우저 안에서** 돌아가는 버전입니다.
 
@@ -313,6 +328,7 @@ LLM에는 이름이나 회사 같은 개인정보를 보내지 않고 **공통�
 │   ├── pipeline.py        ①~④ 연결
 │   ├── social.py          좋아요 · 매칭 · 채팅 · 차단
 │   ├── store.py           프로필 저장소 (예전 형식 데이터 자동 정리)
+│   ├── service.py         화면 요청 공통 로직 (서버·Pyodide가 같이 씀)
 │   ├── persist.py         안전 저장 · 백업 · 데이터 폴더 위치
 │   └── avatar.py          애니메이션 캐릭터 프로필 사진 (SVG)
 ├── data/
@@ -321,9 +337,14 @@ LLM에는 이름이나 회사 같은 개인정보를 보내지 않고 **공통�
 ├── scripts/
 │   ├── demo.py              터미널 데모
 │   ├── generate_profiles.py 랜덤 가상 프로필 만들기
-│   ├── build_pages.py       웹 버전(docs/) 만들기
+│   ├── build_pages.py       웹 버전 1(docs/, 맨 위 index.html) 만들기
+│   ├── build_pyodide.py     웹 버전 2(Pyodide, web/dist/index.html) 만들기
 │   └── parity_reference.py  웹 버전과 Python 결과 비교용 기준값
-├── docs/                    GitHub Pages 웹 버전 (build_pages.py가 만듦)
+├── docs/                    웹 버전 1 (build_pages.py가 만듦)
+├── web/
+│   ├── pyodide_api.py       웹 버전 2: 브라우저 안에서 도는 Python API
+│   ├── pyodide-api.js       웹 버전 2: Python 실행기 로딩 · 요청 전달 · 저장
+│   └── dist/index.html      웹 버전 2 한 파일 (build_pyodide.py가 만듦)
 └── tests/                 pytest
 ```
 
