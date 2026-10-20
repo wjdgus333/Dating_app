@@ -89,8 +89,21 @@ def build(out: Path = DOCS) -> Path:
     return out
 
 
+def build_root_entry(root: Path = ROOT) -> Path:
+    """저장소 맨 위 index.html — Pages 설정이 '/(root)'여도 README 대신 앱이 바로 열리게 한다.
+
+    docs/index.html 과 같은 화면을 쓰되, 파일 경로만 docs/static/… 으로 바꾼다.
+    (.nojekyll: 깃허브가 README를 웹페이지로 바꾸는 처리를 하지 않게 하는 표시)
+    """
+    html = (DOCS / "index.html").read_text(encoding="utf-8").replace('"static/', '"docs/static/')
+    (root / "index.html").write_text(html, encoding="utf-8")
+    (root / ".nojekyll").write_text("", encoding="utf-8")
+    return root / "index.html"
+
+
 if __name__ == "__main__":
     out = build()
+    build_root_entry()
     files = sorted(p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file())
     print(f"웹 버전을 만들었어요 → {out}")
     for f in files:

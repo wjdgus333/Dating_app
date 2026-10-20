@@ -42,7 +42,8 @@
 
 `docs/` 폴더가 새로 만들어집니다. 커밋·푸시하면 1~2분 뒤 위 주소에 반영됩니다. (`pytest`에 docs/가 오래되면 알려 주는 테스트가 있습니다.)
 
-처음 한 번만: 깃허브 저장소 **Settings → Pages → Build and deployment**에서 Source **Deploy from a branch**, Branch **main**, 폴더 **/docs** 를 고르고 Save.
+처음 한 번만: 깃허브 저장소 **Settings → Pages → Build and deployment**에서 Source **Deploy from a branch**, Branch **main**을 고르고 Save.
+폴더는 **/(root)** 와 **/docs** 둘 다 됩니다. 맨 위 `index.html`이 `docs/`의 앱을 바로 열어 주기 때문에, 어느 쪽이든 주소를 치면 설명서(README)가 아니라 앱이 열립니다.
 
 ---
 
