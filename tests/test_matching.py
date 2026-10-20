@@ -496,3 +496,19 @@ def test_upload_photo(client):
 
     bad = client.put("/api/profiles/1/photo", json={"data_url": "data:text/plain;base64," + base64.b64encode(b"hello").decode()})
     assert bad.status_code == 400
+
+
+# ── 웹 버전(docs/) ───────────────────────────────────────
+def test_web_version_is_up_to_date(tmp_path):
+    """화면·설정·샘플을 바꾸고 scripts/build_pages.py 를 안 돌렸으면 실패한다."""
+    import filecmp
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(root / "scripts"))
+    import build_pages
+
+    fresh = build_pages.build(tmp_path / "docs")
+    for name in ("index.html", "static/app.js", "static/style.css", "static/local-api.js", "static/web-data.json", ".nojekyll"):
+        assert filecmp.cmp(fresh / name, root / "docs" / name, shallow=False), f"docs/{name} 가 오래됐어요 → python scripts/build_pages.py"

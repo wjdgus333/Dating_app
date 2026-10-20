@@ -382,3 +382,7 @@ details.more[open] summary::after { content: " ▴"; }
 .photo-preview { width: 84px; height: 84px; border-radius: 24px; background: var(--field); display: grid; place-items: center; font-size: 2rem; overflow: hidden; }
 .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
 @media (max-width: 560px) { .person .avatar { width: 56px; height: 56px; border-radius: 18px; } }
+
+/* ── 웹 버전 백업 ── */
+.web-backup { display: flex; flex-direction: column; gap: 6px; }
+.web-backup label { text-align: center; cursor: pointer; }

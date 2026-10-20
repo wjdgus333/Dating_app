@@ -122,3 +122,31 @@ MAX_BONUS_RULES = 40  # 추가 점수 + 감점 합계
 # ② 단계: 거르기 후 남은 인원이 이보다 많을 때만 임베딩으로 후보를 줄인다.
 CANDIDATE_TOP_K = 100
 DEFAULT_TOP_N = 10
+
+
+def options_payload() -> dict:
+    """화면(app.js)에 줄 선택지 목록. 서버의 /api/options 와 웹 버전(docs/)이 같이 쓴다."""
+    return {
+        "genders": GENDERS,
+        "education": EDUCATION,
+        "smoking": SMOKING,
+        "drinking": DRINKING,
+        "exercise": EXERCISE,
+        "religion": RELIGION,
+        "contact_frequency": CONTACT_FREQUENCY,
+        "date_style": DATE_STYLES,
+        "relationship_goal": RELATIONSHIP_GOALS,
+        "regions": REGIONS,
+        "interests": INTERESTS,
+        "score_categories": {k: {"label": v[0], "logic": v[2]} for k, v in SCORE_CATEGORIES.items()},
+        "importance_levels": IMPORTANCE_LEVELS,
+        "dealbreaker_fields": {
+            k: {"label": v[0], "ops": v[1], "choices": DEALBREAKER_CHOICES.get(k, [])}
+            for k, v in DEALBREAKER_FIELDS.items()
+        },
+        "bonus_fields": {
+            k: {"label": v[0], "ops": v[1], "choices": DEALBREAKER_CHOICES.get(k, [])} for k, v in BONUS_FIELDS.items()
+        },
+        "bonus_points": BONUS_POINTS,
+        "default_weight": DEFAULT_WEIGHT,
+    }
