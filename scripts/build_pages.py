@@ -28,6 +28,9 @@ from matcher import autoreply, avatar, persist, textrules  # noqa: E402
 from matcher import config as C  # noqa: E402
 
 STATIC = ROOT / "app" / "static"
+# GitHub Pages: Jekyll 처리를 끄는 표시 파일. 내용은 상관없고 있기만 하면 된다.
+# 깃허브 웹 업로드는 빈(0바이트) 파일을 못 올려서("Something went really wrong") 설명 한 줄을 넣는다.
+NOJEKYLL = "# GitHub Pages: README 대신 index.html이 열리게 하는 표시 파일 (내용은 상관없음)\n"
 DOCS = ROOT / "docs"
 
 
@@ -86,7 +89,7 @@ def build(out: Path = DOCS) -> Path:
         "sample_social": persist.read_json(persist.PROJECT_DATA / "sample_social.json"),
     }
     (out / "static" / "web-data.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    (out / ".nojekyll").write_text("", encoding="utf-8")
+    (out / ".nojekyll").write_text(NOJEKYLL, encoding="utf-8")
     return out
 
 
@@ -119,7 +122,7 @@ def build_root_entry(root: Path = ROOT) -> Path:
     (.nojekyll: 깃허브가 README를 웹페이지로 바꾸는 처리를 하지 않게 하는 표시. 없어도 index.html은 그대로 열린다.)
     """
     (root / "index.html").write_text(standalone_html(), encoding="utf-8")
-    (root / ".nojekyll").write_text("", encoding="utf-8")
+    (root / ".nojekyll").write_text(NOJEKYLL, encoding="utf-8")
     return root / "index.html"
 
 
