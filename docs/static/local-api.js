@@ -716,18 +716,22 @@
     let interestLine = "";
     if (topic && me.interests.includes(topic)) interestLine = `${topic} 저도 정말 좋아해요! ${name}은 얼마나 자주 하세요?`;
     else if (topic) interestLine = `${eun(topic)} 아직 잘 몰라요 ㅎㅎ 재밌어요? 저는 ${myInterest} 좋아해요.`;
+    const lookup = (table, key, fallback) => (key && key in table ? table[key] : fallback);
+    const plan = lookup(R.plans, me.date_style, "편한 곳에서 커피 한잔하면서 얘기해 봐요!");
+    let datePlan = plan; // 만남 제안에 활동이 나오면 그걸로 답한다
+    if (topic && me.interests.includes(topic)) datePlan = `${topic} 저도 좋아해서 같이 하면 재밌겠어요 ㅎㅎ 언제가 편하세요?`;
+    else if (topic) datePlan = `${eun(topic)} 처음이라 기대돼요 ㅎㅎ 끝나고 ${plan}`;
     const weekendAnswer = Object.entries(me.prompts).find(([q, a]) => q.includes("주말") && a);
     let weekendLine;
     if (weekendAnswer) weekendLine = `저는 주말엔 '${weekendAnswer[1]}' 이렇게 보내요 ㅎㅎ`;
     else if (me.interests.length >= 2) weekendLine = `저는 주말엔 주로 ${rang(me.interests[0])} ${me.interests[1]} 즐겨요.`;
     else weekendLine = `저는 주말엔 주로 ${myInterest} 즐겨요.`;
-    const lookup = (table, key, fallback) => (key && key in table ? table[key] : fallback);
     return {
       name, common, my_interest: myInterest, mbti_line: mbtiLine, age: me.age, partner_age: partner.age,
       occupation: me.occupation, partner_job: isi(partner.occupation), region_line: regionLine,
       drink_line: lookup(R.drinks, me.drinking, "술은 그냥 분위기 따라 조금 마셔요 ㅎㅎ"),
       smoke_line: lookup(R.smokes, me.smoking, "그 얘긴 만나서 편하게 해요 ㅎㅎ"),
-      plan: lookup(R.plans, me.date_style, "편한 곳에서 커피 한잔하면서 얘기해 봐요!"),
+      plan, date_plan: datePlan,
       goal_line: lookup(R.goals, me.relationship_goal, "천천히 알아가고 싶어요."),
       interest_line: interestLine, weekend_line: weekendLine,
     };

@@ -592,43 +592,22 @@ async function openChat(otherId) {
 }
 
 let typingUntil = 0; // 가상 인물이 '입력 중…'인 동안 (자동 답장을 잠깐 뒤에 보여 준다)
+let chatSignature = ""; // 마지막으로 그린 메시지 상태 — 같으면 다시 그리지 않는다
 
-async function refreshChat(scroll) {
-  if (!chatWith || $("#view-chat").hidden) return;
-  const data = await api(`/api/chats/${me.id}/${chatWith}`);
-  let shown = data.messages;
-  const typing = Date.now() < typingUntil;
-  if (typing) {
-    // 내 마지막 메시지 뒤에 온 상대 답장은 '입력 중…'이 끝날 때까지 숨긴다
-    const lastMine = shown.map((m) => m.from).lastIndexOf(me.id);
-    shown = shown.slice(0, lastMine + 1);
-  }
-  const body = shown
-    .map((m) => {
-      const mine = m.from === me.id;
-      const time = m.at.slice(5, 16).replace("T", " ");
-      return `<div class="bubble ${mine ? "mine" : "theirs"}">${esc(m.text)}</div><div class="bubble-time ${mine ? "mine" : ""}">${time}</div>`;
-    })
-    .join("");
+// 채팅방 틀(위쪽 정보 · 메시지 칸 · 입력창)은 대화 상대가 바뀔 때만 한 번 만든다.
+// 3초마다 새 메시지를 확인할 때 입력창까지 다시 만들면, 쓰던 글자의 커서가 사라져서(한글 조합도 끊김) 다시 클릭해야 했다.
+function buildChatRoom(data, key) {
   const room = $("#chatRoom");
-  const prevBody = room.querySelector(".chat-body");
-  const atBottom = prevBody && prevBody.scrollHeight - prevBody.scrollTop - prevBody.clientHeight < 40;
-  const draft = room.querySelector("textarea")?.value ?? "";
+  room.dataset.chatKey = key;
   room.innerHTML = `
     <div class="chat-head">${avatar(data.with)}
       <div class="grow"><b>${esc(data.with.name)}</b>${data.with.bot ? ' <span class="bot-badge">가상 인물 · 자동 답장</span>' : ""}
         <div class="meta">${data.with.age}세 · ${esc(data.with.region)} · ${esc(data.with.occupation)}</div></div>
       <button class="btn tiny ghost" id="blockBtn">차단</button></div>
-    <div class="chat-body">${body || '<div class="chat-empty">매칭됐어요! 먼저 인사해 보세요 👋</div>'}${
-      typing ? '<div class="bubble theirs typing"><span></span><span></span><span></span></div>' : ""
-    }</div>
+    <div class="chat-body"></div>
     <form class="chat-input" id="chatForm"><textarea rows="1" maxlength="500" placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)"></textarea>
       <button class="btn primary">전송</button></form>`;
   const ta = room.querySelector("textarea");
-  ta.value = draft;
-  const newBody = room.querySelector(".chat-body");
-  if (scroll || atBottom) newBody.scrollTop = newBody.scrollHeight;
-  if (scroll) ta.focus();
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -642,6 +621,7 @@ async function refreshChat(scroll) {
     try {
       const sent = await api(`/api/chats/${chatWith}`, { method: "POST", body: JSON.stringify({ sender_id: me.id, text }) });
       ta.value = "";
+      ta.focus(); // 보낸 뒤에도 바로 이어서 쓸 수 있게
       if (sent.auto_reply) {
         // 가상 인물: 1~2.5초 동안 '입력 중…'을 보여 준 뒤 답장을 띄운다 (답장 자체는 이미 저장됨)
         const delay = 1000 + Math.min(1500, text.length * 40);
@@ -662,11 +642,55 @@ async function refreshChat(scroll) {
     profiles = profiles.map((p) => (p.id === updated.id ? updated : p));
     me = updated;
     chatWith = null;
+    room.dataset.chatKey = "";
     room.innerHTML = '<div class="chat-empty">차단했어요.</div>';
     await loadInbox();
     run();
   });
-  if (!typing && data.messages.some((m) => m.to === me.id)) loadInbox(); // 읽음 처리 반영 (입력 중엔 답장이 미리 보이지 않게 건너뜀)
+  ta.focus();
+}
+
+async function refreshChat(scroll) {
+  if (!chatWith || $("#view-chat").hidden) return;
+  const data = await api(`/api/chats/${me.id}/${chatWith}`);
+  const room = $("#chatRoom");
+  const key = `${me.id}:${chatWith}`;
+  if (room.dataset.chatKey !== key || !room.querySelector(".chat-body")) {
+    buildChatRoom(data, key);
+    chatSignature = "";
+    scroll = true;
+  }
+
+  let shown = data.messages;
+  const typing = Date.now() < typingUntil;
+  if (typing) {
+    // 내 마지막 메시지 뒤에 온 상대 답장은 '입력 중…'이 끝날 때까지 숨긴다
+    const lastMine = shown.map((m) => m.from).lastIndexOf(me.id);
+    shown = shown.slice(0, lastMine + 1);
+  }
+
+  // 메시지가 바뀌었을 때만 메시지 칸을 다시 그린다 (입력창은 그대로)
+  const body = room.querySelector(".chat-body");
+  const signature = JSON.stringify([shown.length, shown.length ? shown[shown.length - 1].at : "", typing]);
+  const changed = signature !== chatSignature;
+  if (changed) {
+    const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+    body.innerHTML =
+      (shown
+        .map((m) => {
+          const mine = m.from === me.id;
+          const time = m.at.slice(5, 16).replace("T", " ");
+          return `<div class="bubble ${mine ? "mine" : "theirs"}">${esc(m.text)}</div><div class="bubble-time ${mine ? "mine" : ""}">${time}</div>`;
+        })
+        .join("") || '<div class="chat-empty">매칭됐어요! 먼저 인사해 보세요 👋</div>') +
+      (typing ? '<div class="bubble theirs typing"><span></span><span></span><span></span></div>' : "");
+    if (scroll || atBottom) body.scrollTop = body.scrollHeight;
+    chatSignature = signature;
+  } else if (scroll) {
+    body.scrollTop = body.scrollHeight;
+  }
+
+  if (changed && !typing) loadInbox(); // 새 메시지가 보였을 때만 목록(안 읽은 수) 갱신
 }
 
 function showTab(name) {
@@ -703,6 +727,7 @@ async function selectUser(id) {
   chatWith = null;
   clearInterval(chatTimer);
   $("#chatRoom").innerHTML = '<div class="chat-empty">왼쪽에서 매칭된 사람을 골라 대화를 시작해 보세요.</div>';
+  $("#chatRoom").dataset.chatKey = "";
   await loadInbox();
   $("#user").value = me.id;
   $("#chatUser").value = me.id;

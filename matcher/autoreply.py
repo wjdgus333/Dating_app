@@ -19,8 +19,9 @@ RULES = {
     "intents": [
         {"name": "bye", "keywords": ["잘 자", "잘자", "좋은 밤", "들어가", "다음에 또", "바이", "안녕히"],
          "replies": ["네 {name}도 좋은 밤 보내세요 🌙 내일 또 얘기해요!", "오늘 얘기 즐거웠어요 ㅎㅎ {name} 푹 쉬세요!"]},
-        {"name": "date", "keywords": ["만나", "만날", "볼래", "보실래", "데이트", "시간 되", "시간 괜찮", "커피 한", "밥 한", "같이 가"],
-         "replies": ["좋아요! {plan}", "{name}이랑이면 좋아요 ㅎㅎ {plan}"]},
+        {"name": "date", "keywords": ["만나", "만날", "볼래", "보실래", "데이트", "시간 되", "시간 괜찮", "커피 한", "밥 한", "같이 가",
+                                    "가실래", "갈래", "가요?", "하실래", "놀러"],
+         "replies": ["좋아요! {date_plan}", "{name}이랑이면 좋아요 ㅎㅎ {date_plan}"]},
         {"name": "greeting", "keywords": ["안녕", "반가", "처음 뵙", "하이", "hi", "hello"],
          "replies": ["안녕하세요 {name}! 연락 주셔서 반가워요 😊 {common}", "반가워요 {name}! {common}"]},
         {"name": "compliment", "keywords": ["예쁘", "이쁘", "멋지", "멋있", "귀엽", "잘생", "매력"],
@@ -136,6 +137,14 @@ def context(me: Profile, partner: Profile, text: str) -> dict:
     else:
         interest_line = ""
 
+    plan = RULES["plans"].get(me.date_style or "", "편한 곳에서 커피 한잔하면서 얘기해 봐요!")
+    if topic and topic in me.interests:  # 만남 제안에 활동이 나오면 그걸로 답한다
+        date_plan = f"{topic} 저도 좋아해서 같이 하면 재밌겠어요 ㅎㅎ 언제가 편하세요?"
+    elif topic:
+        date_plan = f"{eun(topic)} 처음이라 기대돼요 ㅎㅎ 끝나고 {plan}"
+    else:
+        date_plan = plan
+
     weekend_answer = next((a for q, a in me.prompts.items() if "주말" in q and a), None)
     if weekend_answer:
         weekend_line = f"저는 주말엔 '{weekend_answer}' 이렇게 보내요 ㅎㅎ"
@@ -156,7 +165,8 @@ def context(me: Profile, partner: Profile, text: str) -> dict:
         "region_line": region_line,
         "drink_line": RULES["drinks"].get(me.drinking or "", "술은 그냥 분위기 따라 조금 마셔요 ㅎㅎ"),
         "smoke_line": RULES["smokes"].get(me.smoking or "", "그 얘긴 만나서 편하게 해요 ㅎㅎ"),
-        "plan": RULES["plans"].get(me.date_style or "", "편한 곳에서 커피 한잔하면서 얘기해 봐요!"),
+        "plan": plan,
+        "date_plan": date_plan,
         "goal_line": RULES["goals"].get(me.relationship_goal or "", "천천히 알아가고 싶어요."),
         "interest_line": interest_line,
         "weekend_line": weekend_line,
