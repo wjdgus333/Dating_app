@@ -249,7 +249,7 @@ def test_api_signup_requires_fields(client):
 def test_like_back_creates_match_and_chat(client):
     # 샘플 데이터: 11번 이서연이 1번 김민준에게 한마디와 함께 좋아요를 보낸 상태
     inbox = client.get("/api/users/1/inbox").json()
-    assert [r["id"] for r in inbox["received"]] == [11, 12]
+    assert [r["id"] for r in inbox["received"]][:2] == [11, 12]  # 확인용 사례 (그 뒤로 다른 가상 인물의 좋아요도 있음)
 
     # 매칭 전에는 메시지 불가
     res = client.post("/api/chats/11", json={"sender_id": 1, "text": "안녕하세요"})
@@ -640,3 +640,37 @@ def test_interest_bonus_counts_each_shared_interest():
     assert [(c["times"], c["earned"]) for c in item["bonus_checks"]] == [(2, 20), (2, -10), (1, 15)]
     assert "추가 점수 +10×2" in item["formula"] and "감점 -5×2" in item["formula"]
     assert "× 2개" in next(c["detail"] for c in item["breakdown"] if c["key"] == "bonus:0")
+
+
+# ── 기본 데이터: 가상 인물끼리 미리 보낸 좋아요 ──────────────
+def test_default_likes_follow_recommendations():
+    """기본 좋아요는 거르기·성별 조건을 통과한 사람에게만, 사람마다 1~2개(확인용 사례 포함 최대 3개)."""
+    import collections
+
+    from matcher import filters, persist
+
+    people = {p["id"]: Profile.model_validate(p) for p in persist.read_json(persist.PROJECT_DATA / "sample_profiles.json")}
+    social = persist.read_json(persist.PROJECT_DATA / "sample_social.json")
+    for l in social["likes"]:
+        assert filters.check(people[l["from"]], people[l["to"]]).passed, l
+    per_sender = collections.Counter(l["from"] for l in social["likes"])
+    # 거르기 조건이 너무 엄격해 추천이 0명인 사람은 보낼 상대가 없다 → 그런 사람만 빠진다
+    from matcher.pipeline import recommend
+
+    no_one = {pid for pid, p in people.items() if not recommend(p, list(people.values()))["ranking"]}
+    assert set(per_sender) == set(people) - no_one and max(per_sender.values()) <= 3
+    receivers = {l["to"] for l in social["likes"]}
+    assert len(receivers) >= 30  # 민준 말고도 여러 사람이 좋아요를 받아 둔 상태
+
+
+def test_default_chats_have_only_first_like_messages():
+    """처음부터 매칭된 채팅방에는 서로 보낸 한마디만 있다 (그 뒤 대화는 없음)."""
+    from matcher import persist
+
+    social = persist.read_json(persist.PROJECT_DATA / "sample_social.json")
+    like_msgs = {(l["from"], l["to"]): l["message"] for l in social["likes"]}
+    assert len(social["messages"]) >= 10
+    for pair, msgs in social["messages"].items():
+        a, b = map(int, pair.split("-"))
+        assert (a, b) in like_msgs and (b, a) in like_msgs  # 서로 좋아요
+        assert len(msgs) <= 2 and all(m["text"] == like_msgs[(m["from"], m["to"])] for m in msgs)
