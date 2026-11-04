@@ -234,7 +234,7 @@ const pickedPoints = { bn: 10, pn: 10 };
 function describeBonus(r) {
   const label = OPT.bonus_fields[r.field].label;
   const v = Array.isArray(r.value) ? r.value.join(", ") : r.value;
-  const cond = r.op === "min" ? `${label} ${v} 이상` : r.op === "max" ? `${label} ${v} 이하` : r.field === "interests" ? `관심사에 ${v}` : `${label} ${v}`;
+  const cond = r.op === "min" ? `${label} ${v} 이상` : r.op === "max" ? `${label} ${v} 이하` : r.field === "interests" ? `관심사에 ${v} (하나당)` : `${label} ${v}`;
   return `${cond} → ${r.points > 0 ? "+" : "−"}${Math.abs(r.points)}`;
 }
 
@@ -360,7 +360,7 @@ function renderScoreGuide(r) {
     <p class="guide-sub">점수에 영향을 주는 것</p>
     <ul>
       <li><b>중요도</b>: 왼쪽 ‘중요도’에서 항목마다 상관없음 0 · 낮음 5 · 보통 10 · 중요 15 · 매우 중요 20점으로 정해요. 관심사는 겹친 개수만큼 곱해져요.</li>
-      <li><b>추가 점수 / 감점</b>: 내가 정한 규칙에 해당하면 +5~20 / −5~20점 (지금 추가 ${plus}개 · 감점 ${minus}개)</li>
+      <li><b>추가 점수 / 감점</b>: 내가 정한 규칙에 해당하면 +5~20 / −5~20점. 관심사 규칙은 <b>겹친 관심사 하나당</b> 적용돼요 (지금 추가 ${plus}개 · 감점 ${minus}개)</li>
       <li><b>쌍방 모드</b>: ${
         r.settings.mutual
           ? "켜짐 — (내 기준 점수 + 상대 기준 점수) ÷ 2. 상대가 정한 중요도·추가 점수도 반영돼요."
@@ -412,9 +412,11 @@ function renderPerson(x, mutual) {
   const checkRows = (checks) =>
     checks
       .map((c) => {
-        const pts = mutual ? c.points / 2 : c.points;
+        const pts = mutual ? c.earned / 2 : c.earned; // 관심사 규칙은 겹친 개수만큼
         return `<div class="bd-row ${c.points < 0 ? "penalty" : "bonus"} ${c.hit ? "hit" : "miss"}">
-          <span class="lbl">${c.hit ? "✓ 해당" : "✕ 미해당"}<small>${c.points > 0 ? "+" : "−"}${Math.abs(c.points)}점 규칙</small></span>
+          <span class="lbl">${c.hit ? "✓ 해당" : "✕ 미해당"}<small>${c.points > 0 ? "+" : "−"}${Math.abs(c.points)}점 규칙${
+            c.times > 1 ? ` × ${c.times}개` : ""
+          }</small></span>
           <span class="detail">${esc(c.text)}<br><span class="sub">${esc(c.reason)}</span></span>
           <span class="num">${c.hit ? (pts > 0 ? "+" : "−") + fmt(Math.abs(pts)) : "0"}</span></div>`;
       })

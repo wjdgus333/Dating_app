@@ -83,7 +83,9 @@ def why_first(first_name: str, first: ScoreResult, second_name: str | None, seco
 def score_formula(result: ScoreResult) -> str:
     """예) 관심사 15×3 + 원하는 관계 15×1 + 지역 10×1 = 70점"""
     parts = [
-        f"{c.label} {c.points:+g}" if "bonus:" in c.key else f"{c.label} {c.weight}×{c.matches}"
+        (f"{c.label} {c.weight:+g}×{c.matches}" if c.matches > 1 else f"{c.label} {c.points:+g}")
+        if "bonus:" in c.key
+        else f"{c.label} {c.weight}×{c.matches}"
         for c in result.categories
         if c.points and c.matches
     ]

@@ -103,7 +103,7 @@ class BonusRule(BaseModel):
         elif self.op == "max":
             cond = f"{label} {self.value} 이하"
         elif self.field == "interests":
-            cond = f"관심사에 {', '.join(self.value)}"
+            cond = f"관심사에 {', '.join(self.value)} (하나당)"
         else:
             cond = f"{label} {', '.join(self.value)}"
         return f"{cond} → {self.points:+d}점"

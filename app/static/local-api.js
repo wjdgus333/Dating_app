@@ -110,7 +110,7 @@
     let cond;
     if (r.op === "min") cond = `${label} ${r.value} 이상`;
     else if (r.op === "max") cond = `${label} ${r.value} 이하`;
-    else if (r.field === "interests") cond = `관심사에 ${r.value.join(", ")}`;
+    else if (r.field === "interests") cond = `관심사에 ${r.value.join(", ")} (하나당)`;
     else cond = `${label} ${r.value.join(", ")}`;
     return `${cond} → ${signedInt(r.points)}점`;
   }
@@ -339,6 +339,12 @@
     return ok ? `${label} ${value}` : null;
   }
 
+  // 규칙이 몇 번 적용되는지: 관심사는 겹친 개수, 나머지는 해당하면 1 (bonus.py times)
+  function bonusTimes(rule, other) {
+    if (rule.field === "interests") return rule.value.filter((t) => (other.interests || []).includes(t)).length;
+    return bonusCheck(rule, other) ? 1 : 0;
+  }
+
   function score(me, other, mutual = false, myWeights = null) {
     const myW = myWeights || effectiveWeights(me.preferences);
     const theirW = effectiveWeights(other.preferences);
@@ -354,21 +360,28 @@
     }
     me.preferences.bonus_rules.forEach((rule, i) => {
       const reason = bonusCheck(rule, other);
-      if (reason)
+      if (reason) {
+        const n = bonusTimes(rule, other);
+        const pts = rule.points * n;
         categories.push({
-          key: `bonus:${i}`, label: rule.points < 0 ? "감점" : "추가 점수", matches: 1, detail: `${reason} (${bonusDescribe(rule)})`,
-          weight: rule.points, points: rule.points, contribution: mutual ? rule.points / 2 : rule.points, their_weight: 0, their_points: 0,
+          key: `bonus:${i}`, label: rule.points < 0 ? "감점" : "추가 점수", matches: n,
+          detail: `${reason} (${bonusDescribe(rule)}${n > 1 ? ` × ${n}개` : ""})`,
+          weight: rule.points, points: pts, contribution: mutual ? pts / 2 : pts, their_weight: 0, their_points: 0,
         });
+      }
     });
     if (mutual)
       other.preferences.bonus_rules.forEach((rule, i) => {
         const reason = bonusCheck(rule, me);
-        if (reason)
+        if (reason) {
+          const n = bonusTimes(rule, me);
+          const pts = rule.points * n;
           categories.push({
-            key: `their_bonus:${i}`, label: rule.points < 0 ? "상대의 감점" : "상대의 추가 점수", matches: 1,
-            detail: `상대 기준: 나의 ${reason} (${bonusDescribe(rule)})`, weight: 0, points: 0, contribution: rule.points / 2,
-            their_weight: rule.points, their_points: rule.points,
+            key: `their_bonus:${i}`, label: rule.points < 0 ? "상대의 감점" : "상대의 추가 점수", matches: n,
+            detail: `상대 기준: 나의 ${reason} (${bonusDescribe(rule)}${n > 1 ? ` × ${n}개` : ""})`, weight: 0, points: 0,
+            contribution: pts / 2, their_weight: rule.points, their_points: pts,
           });
+        }
       });
     const myScore = sum(categories.map((c) => c.points));
     const theirScore = sum(categories.map((c) => c.their_points));
@@ -438,7 +451,13 @@
   function scoreFormula(s) {
     const parts = s.categories
       .filter((c) => c.points && c.matches)
-      .map((c) => (c.key.includes("bonus:") ? `${c.label} ${signedG(c.points)}` : `${c.label} ${c.weight}×${c.matches}`));
+      .map((c) =>
+        c.key.includes("bonus:")
+          ? c.matches > 1
+            ? `${c.label} ${signedG(c.weight)}×${c.matches}`
+            : `${c.label} ${signedG(c.points)}`
+          : `${c.label} ${c.weight}×${c.matches}`
+      );
     return `${parts.join(" + ").replaceAll("+ -", "- ") || "겹치는 항목 없음"} = ${g(s.my_score)}점`;
   }
 
@@ -536,7 +555,8 @@
         penalty_score: round(penaltyPart, 1),
         bonus_checks: me.preferences.bonus_rules.map((r) => {
           const reason = bonusCheck(r, p);
-          return { text: bonusDescribe(r), points: r.points, hit: reason !== null, reason: reason || "해당 없음" };
+          const times = bonusTimes(r, p);
+          return { text: bonusDescribe(r), points: r.points, hit: reason !== null, reason: reason || "해당 없음", times, earned: r.points * times };
         }),
         my_score: round(s.my_score, 1),
         their_score: round(s.their_score, 1),

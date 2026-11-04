@@ -617,3 +617,26 @@ def test_pyodide_single_file_is_up_to_date():
 
     same = (root / "web" / "dist" / "index.html").read_text(encoding="utf-8") == build_pyodide.build_html()
     assert same, "web/dist/index.html 이 오래됐어요 → python scripts/build_pyodide.py"
+
+
+def test_interest_bonus_counts_each_shared_interest():
+    """관심사 추가 점수·감점은 겹친 관심사 하나당 적용된다."""
+    from matcher import config as Cfg
+    from matcher.models import BonusRule
+
+    rules = [
+        BonusRule(field="interests", op="in", value=["등산", "캠핑", "카페"], points=10),  # 등산·카페 2개 겹침 → +20
+        BonusRule(field="interests", op="in", value=["게임", "골프"], points=-5),  # 둘 다 → −10
+        BonusRule(field="mbti", op="in", value=["ENFP"], points=15),  # 관심사가 아니면 한 번만 → +15
+    ]
+    me = make(1, gender="남성", preferences=Preferences(bonus_rules=rules, weights={k: 0 for k in Cfg.SCORE_CATEGORIES}))
+    other = make(2, interests=["등산", "카페", "게임", "골프", "요리"], mbti="ENFP")
+    s = scoring.score(me, other)
+    assert [c.points for c in s.categories if c.key.startswith("bonus:")] == [20, -10, 15]
+    assert s.total == 25
+
+    item = recommend(me, [me, other])["ranking"][0]
+    assert item["bonus_score"] == 35 and item["penalty_score"] == -10
+    assert [(c["times"], c["earned"]) for c in item["bonus_checks"]] == [(2, 20), (2, -10), (1, 15)]
+    assert "추가 점수 +10×2" in item["formula"] and "감점 -5×2" in item["formula"]
+    assert "× 2개" in next(c["detail"] for c in item["breakdown"] if c["key"] == "bonus:0")

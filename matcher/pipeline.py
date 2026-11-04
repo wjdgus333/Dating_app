@@ -113,7 +113,14 @@ def recommend(
             "penalty_score": round(penalty_part, 1),  # 감점 규칙으로 빠진 점수 (0 또는 음수)
             # 내 추가 점수 규칙 전부를 해당/미해당으로 (점수 계산 보기에서 표시)
             "bonus_checks": [
-                {"text": r.describe(), "points": r.points, "hit": (reason := bonus.check(r, p)) is not None, "reason": reason or "해당 없음"}
+                {
+                    "text": r.describe(),
+                    "points": r.points,
+                    "hit": (reason := bonus.check(r, p)) is not None,
+                    "reason": reason or "해당 없음",
+                    "times": bonus.times(r, p),  # 관심사 규칙은 겹친 개수
+                    "earned": r.points * bonus.times(r, p),
+                }
                 for r in me.preferences.bonus_rules
             ],
             "my_score": round(s.my_score, 1),

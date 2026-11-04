@@ -2,12 +2,19 @@
 
 예) MBTI가 ENFP·INFP면 +15 / 관심사에 등산·캠핑이 있으면 +10 / 키 175 이상이면 +5 / 지역이 서울이면 +5
 
-- 관심사는 목록 중 하나라도 있으면 해당 (겹친 개수와 상관없이 규칙 하나당 한 번).
+- 관심사는 목록 중 겹친 관심사 하나당 점수를 준다 (등산·캠핑·카페 +10 규칙에 둘이 겹치면 +20). 감점도 같다.
 - 상대가 그 항목을 입력하지 않았으면 해당하지 않는다.
 """
 
 from . import config as C
 from .models import BonusRule, Profile
+
+
+def times(rule: BonusRule, other: Profile) -> int:
+    """규칙이 몇 번 적용되는지: 관심사는 겹친 개수, 나머지는 해당하면 1."""
+    if rule.field == "interests":
+        return sum(1 for t in rule.value if t in (other.interests or []))
+    return 1 if check(rule, other) else 0
 
 
 def check(rule: BonusRule, other: Profile) -> str | None:

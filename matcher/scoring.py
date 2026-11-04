@@ -106,15 +106,17 @@ def score(me: Profile, other: Profile, mutual: bool = False, my_weights: dict[st
     for i, rule in enumerate(me.preferences.bonus_rules):
         reason = bonus.check(rule, other)
         if reason:
+            n = bonus.times(rule, other)  # 관심사는 겹친 개수만큼
+            pts = rule.points * n
             categories.append(
                 CategoryScore(
                     key=f"bonus:{i}",
                     label="감점" if rule.is_penalty else "추가 점수",
-                    matches=1,
-                    detail=f"{reason} ({rule.describe()})",
+                    matches=n,
+                    detail=f"{reason} ({rule.describe()}{f' × {n}개' if n > 1 else ''})",
                     weight=rule.points,
-                    points=rule.points,
-                    contribution=rule.points / 2 if mutual else rule.points,
+                    points=pts,
+                    contribution=pts / 2 if mutual else pts,
                 )
             )
     # 쌍방 모드: 상대가 정한 규칙에 내가 해당하면 상대 기준 점수에 더한다.
@@ -122,17 +124,19 @@ def score(me: Profile, other: Profile, mutual: bool = False, my_weights: dict[st
         for i, rule in enumerate(other.preferences.bonus_rules):
             reason = bonus.check(rule, me)
             if reason:
+                n = bonus.times(rule, me)
+                pts = rule.points * n
                 categories.append(
                     CategoryScore(
                         key=f"their_bonus:{i}",
                         label="상대의 감점" if rule.is_penalty else "상대의 추가 점수",
-                        matches=1,
-                        detail=f"상대 기준: 나의 {reason} ({rule.describe()})",
+                        matches=n,
+                        detail=f"상대 기준: 나의 {reason} ({rule.describe()}{f' × {n}개' if n > 1 else ''})",
                         weight=0,
                         points=0,
-                        contribution=rule.points / 2,
+                        contribution=pts / 2,
                         their_weight=rule.points,
-                        their_points=rule.points,
+                        their_points=pts,
                     )
                 )
 
