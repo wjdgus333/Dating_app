@@ -125,6 +125,9 @@ class SocialStore:
         msgs = self._data["messages"].get(_pair(a, b), [])
         return msgs[-1] if msgs else None
 
+    def conversation_length(self, a: int, b: int) -> int:
+        return len(self._data["messages"].get(_pair(a, b), []))
+
     def unread_count(self, viewer: int, other: int) -> int:
         return sum(1 for m in self._data["messages"].get(_pair(viewer, other), []) if m["to"] == viewer and not m["read"])
 

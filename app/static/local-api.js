@@ -678,7 +678,82 @@
     const msgs = social.messages[pairKey(a, b)] || [];
     return msgs.length ? msgs[msgs.length - 1] : null;
   };
-  const card = (p) => ({ id: p.id, name: displayName(p), age: p.age, region: `${p.city} ${p.district || ""}`.trim(), occupation: p.occupation, photo: p.photo });
+
+  // ── 가상 인물 자동 답장 (matcher/autoreply.py 와 같은 규칙 · 문장은 CFG.AUTOREPLY) ──
+  let BOT_IDS = new Set();
+  const isBot = (id) => BOT_IDS.has(Number(id));
+  function hasBatchim(word) {
+    if (!word) return false;
+    const code = word.charCodeAt(word.length - 1);
+    return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
+  }
+  const eun = (w) => w + (hasBatchim(w) ? "은" : "는");
+  const rang = (w) => w + (hasBatchim(w) ? "이랑" : "랑");
+  const isi = (w) => w + (hasBatchim(w) ? "이시" : "시");
+  const mentionedInterest = (text) => CFG.INTERESTS.find((t) => text.includes(t)) || null;
+
+  function replyContext(me, partner, text) {
+    const R = CFG.AUTOREPLY;
+    const name = `${displayName(partner)}님`;
+    const shared = me.interests.filter((t) => partner.interests.includes(t));
+    const myInterest = me.interests.length ? me.interests[0] : "산책";
+    const common = shared.length ? `저도 ${shared[0]} 좋아해서 반가웠어요!` : "프로필 재밌게 봤어요!";
+    let mbtiLine;
+    if (me.mbti) {
+      mbtiLine = `저는 ${me.mbti}예요!`;
+      if (partner.mbti) {
+        let same = 0;
+        for (let i = 0; i < Math.min(me.mbti.length, partner.mbti.length); i++) if (me.mbti[i] === partner.mbti[i]) same++;
+        mbtiLine += ` ${name}은 ${isi(partner.mbti)}던데 ` + (same >= 2 ? `${same}글자나 같네요 ㅎㅎ` : "저랑 많이 달라서 신기해요 ㅎㅎ");
+      } else mbtiLine += ` ${name}은 뭐예요?`;
+    } else mbtiLine = `MBTI는 아직 검사를 안 해 봤어요 ㅎㅎ ${name}은 뭐예요?`;
+    const where = me.district ? `${me.city} ${me.district}` : me.city;
+    const regionLine =
+      partner.city === me.city
+        ? `저는 ${where}에 살아요! ${name}도 ${isi(me.city)}죠? 가까워서 좋네요 ㅎㅎ`
+        : `저는 ${where}에 살아요! ${name}은 ${isi(partner.city)}죠? 조금 멀지만 괜찮아요 ㅎㅎ`;
+    const topic = mentionedInterest(text);
+    let interestLine = "";
+    if (topic && me.interests.includes(topic)) interestLine = `${topic} 저도 정말 좋아해요! ${name}은 얼마나 자주 하세요?`;
+    else if (topic) interestLine = `${eun(topic)} 아직 잘 몰라요 ㅎㅎ 재밌어요? 저는 ${myInterest} 좋아해요.`;
+    const weekendAnswer = Object.entries(me.prompts).find(([q, a]) => q.includes("주말") && a);
+    let weekendLine;
+    if (weekendAnswer) weekendLine = `저는 주말엔 '${weekendAnswer[1]}' 이렇게 보내요 ㅎㅎ`;
+    else if (me.interests.length >= 2) weekendLine = `저는 주말엔 주로 ${rang(me.interests[0])} ${me.interests[1]} 즐겨요.`;
+    else weekendLine = `저는 주말엔 주로 ${myInterest} 즐겨요.`;
+    const lookup = (table, key, fallback) => (key && key in table ? table[key] : fallback);
+    return {
+      name, common, my_interest: myInterest, mbti_line: mbtiLine, age: me.age, partner_age: partner.age,
+      occupation: me.occupation, partner_job: isi(partner.occupation), region_line: regionLine,
+      drink_line: lookup(R.drinks, me.drinking, "술은 그냥 분위기 따라 조금 마셔요 ㅎㅎ"),
+      smoke_line: lookup(R.smokes, me.smoking, "그 얘긴 만나서 편하게 해요 ㅎㅎ"),
+      plan: lookup(R.plans, me.date_style, "편한 곳에서 커피 한잔하면서 얘기해 봐요!"),
+      goal_line: lookup(R.goals, me.relationship_goal, "천천히 알아가고 싶어요."),
+      interest_line: interestLine, weekend_line: weekendLine,
+    };
+  }
+  function detectIntent(text) {
+    const low = text.toLowerCase();
+    for (const intent of CFG.AUTOREPLY.intents) {
+      if (intent.name === "interest") {
+        if (mentionedInterest(text)) return "interest";
+      } else if (intent.keywords.some((k) => low.includes(k))) return intent.name;
+    }
+    return "fallback";
+  }
+  const pickReply = (options, me, partner, turn) => options[fnv1a(`${me.id}:${partner.id}:${turn}`) % options.length];
+  const fillReply = (template, ctx) => template.replace(/\{(\w+)\}/g, (_, k) => String(ctx[k])).trim();
+  function autoReply(me, partner, text, turn) {
+    const intent = detectIntent(text);
+    const options = intent === "fallback" ? CFG.AUTOREPLY.fallback : CFG.AUTOREPLY.intents.find((i) => i.name === intent).replies;
+    return fillReply(pickReply(options, me, partner, turn), replyContext(me, partner, text));
+  }
+  const autoOpener = (me, partner, turn) => fillReply(pickReply(CFG.AUTOREPLY.opener, me, partner, turn), replyContext(me, partner, ""));
+  const conversationLength = (a, b) => (social.messages[pairKey(a, b)] || []).length;
+  const card = (p) => ({
+    id: p.id, name: displayName(p), age: p.age, region: `${p.city} ${p.district || ""}`.trim(), occupation: p.occupation, photo: p.photo,
+    bot: isBot(p.id), // 가상 인물(자동 답장)
+  });
 
   // ── 캐릭터 프로필 사진 (avatar.py 와 같은 그림) ─────────────
   function mulberry(seed) {
@@ -820,7 +895,19 @@
         const me = getProfile(body.from_id) || fail("프로필을 찾을 수 없습니다.");
         const other = getProfile(body.to_id) || fail("프로필을 찾을 수 없습니다.");
         if (me.preferences.blocked_ids.includes(other.id) || other.preferences.blocked_ids.includes(me.id)) fail("차단된 사용자예요.");
-        return like(me.id, other.id, body.message);
+        const message = body.message || "";
+        let result = like(me.id, other.id, message);
+        let auto = false;
+        if (!result.matched && isBot(other.id) && other.id !== me.id) {
+          result = like(other.id, me.id, "");
+          auto = true;
+        }
+        if (result.matched && isBot(other.id) && other.id !== me.id) {
+          const turn = conversationLength(me.id, other.id);
+          addMessage(other.id, me.id, message.trim() ? autoReply(other, me, message, turn) : autoOpener(other, me, turn));
+          saveSocial();
+        }
+        return { matched: result.matched, auto };
       },
     ],
     [
@@ -863,8 +950,13 @@
         if (text.length > 500) fail("메시지는 500자까지 보낼 수 있어요.");
         if (!isMatch(body.sender_id, to)) fail("서로 좋아요를 눌러 매칭된 사람에게만 메시지를 보낼 수 있어요.");
         const msg = addMessage(body.sender_id, to, text);
+        const autoReplied = isBot(to) && to !== Number(body.sender_id);
+        if (autoReplied) {
+          const turn = conversationLength(body.sender_id, to);
+          addMessage(to, body.sender_id, autoReply(getProfile(to), getProfile(body.sender_id), text, turn));
+        }
         saveSocial();
-        return msg;
+        return { ...msg, auto_reply: autoReplied };
       },
     ],
     [
@@ -957,6 +1049,7 @@
     const data = window.WEB_DATA || (await (await fetch(`${BASE}static/web-data.json`)).json());
     CFG = data.config;
     SAMPLE = { profiles: data.sample_profiles, social: data.sample_social };
+    BOT_IDS = new Set(SAMPLE.profiles.map((p) => p.id)); // 기본 데이터 = 가상 인물
     const stored = load(KEY.profiles);
     profiles = (stored && stored.length ? stored : clone(SAMPLE.profiles)).map(normalizeProfile);
     social = { likes: [], messages: {}, ...(load(KEY.social) || clone(SAMPLE.social)) };
@@ -966,5 +1059,5 @@
     }
   })();
 
-  window.LOCAL_API = { handle, photoUrl, exportData, importData, ready, _engine: { recommend, score, fnv1a, mulberry, avatarSvg, parseRules } };
+  window.LOCAL_API = { handle, photoUrl, exportData, importData, ready, _engine: { recommend, score, fnv1a, mulberry, avatarSvg, parseRules, autoReply, autoOpener } };
 })();

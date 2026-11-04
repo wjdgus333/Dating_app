@@ -4,11 +4,13 @@ FastAPI 서버(app/main.py)와 브라우저 안의 Python(web/pyodide_api.py)이
 → 두 버전의 동작이 어긋나지 않는다.
 """
 
+from functools import lru_cache
+
+from . import autoreply, persist, textrules
 from .avatar import new_seed
 from .models import Dealbreaker, Profile
 from .social import SocialError, SocialStore
 from .store import ProfileStore
-from . import textrules
 
 
 class ServiceError(Exception):
@@ -26,6 +28,16 @@ def user(store: ProfileStore, user_id: int) -> Profile:
     return p
 
 
+@lru_cache(maxsize=1)
+def default_ids() -> frozenset[int]:
+    """기본 데이터(가상 인물)의 id. 이 사람들은 좋아요를 자동으로 돌려주고 메시지에 자동으로 답한다."""
+    return frozenset(p["id"] for p in persist.read_json(persist.PROJECT_DATA / "sample_profiles.json"))
+
+
+def is_bot(profile_id: int) -> bool:
+    return profile_id in default_ids()
+
+
 def card(p: Profile) -> dict:
     return {
         "id": p.id,
@@ -34,6 +46,7 @@ def card(p: Profile) -> dict:
         "region": f"{p.city} {p.district or ''}".strip(),
         "occupation": p.occupation,
         "photo": p.photo,
+        "bot": is_bot(p.id),  # 가상 인물(자동 답장)
     }
 
 
@@ -50,9 +63,21 @@ def like(store: ProfileStore, social: SocialStore, from_id: int, to_id: int, mes
     if other.id in me.preferences.blocked_ids or me.id in other.preferences.blocked_ids:
         raise ServiceError(400, "차단된 사용자예요.")
     try:
-        return social.like(me.id, other.id, message)
+        result = social.like(me.id, other.id, message)
     except SocialError as e:
         raise ServiceError(400, str(e))
+
+    # 가상 인물은 좋아요를 받으면 자동으로 돌려준다 → 바로 매칭
+    auto = False
+    if not result["matched"] and is_bot(other.id) and other.id != me.id:
+        result = social.like(other.id, me.id, "")
+        auto = True
+    # 매칭되면 가상 인물이 먼저 말을 건다: 한마디를 받았으면 거기에 답하고, 없으면 인사
+    if result["matched"] and is_bot(other.id) and other.id != me.id:
+        turn = social.conversation_length(me.id, other.id)
+        text = autoreply.reply(other, me, message, turn) if message.strip() else autoreply.opener(other, me, turn)
+        social.send(other.id, me.id, text)
+    return {"matched": result["matched"], "auto": auto}
 
 
 def inbox(store: ProfileStore, social: SocialStore, user_id: int) -> dict:
@@ -85,12 +110,18 @@ def messages(store: ProfileStore, social: SocialStore, user_id: int, other_id: i
 
 
 def send_message(store: ProfileStore, social: SocialStore, sender_id: int, other_id: int, text: str) -> dict:
-    user(store, sender_id)
-    user(store, other_id)
+    me = user(store, sender_id)
+    other = user(store, other_id)
     try:
-        return social.send(sender_id, other_id, text)
+        msg = social.send(sender_id, other_id, text)
     except SocialError as e:
         raise ServiceError(403, str(e))
+    # 가상 인물에게 보낸 메시지에는 자동으로 답한다
+    auto_reply = is_bot(other_id) and other_id != sender_id
+    if auto_reply:
+        turn = social.conversation_length(sender_id, other_id)
+        social.send(other_id, sender_id, autoreply.reply(other, me, text, turn))
+    return {**msg, "auto_reply": auto_reply}
 
 
 def block(store: ProfileStore, social: SocialStore, user_id: int, target_id: int) -> Profile:

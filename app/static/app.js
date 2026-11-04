@@ -338,7 +338,40 @@ function renderFlow(r) {
       .map(([n, v], i) => `<div class="flow-step ${i === 3 ? "last" : ""}"><div class="n">${n}</div><div class="v">${v}<small>명</small></div></div>`)
       .join("")}</div>
     <ul class="flow-notes">${r.trace.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+    ${renderScoreGuide(r)}
   </section>`;
+}
+
+// 점수가 어떤 원리로 매겨지는지, 무엇이 점수에 영향을 주는지 (지금 설정값 그대로 보여 준다)
+function renderScoreGuide(r) {
+  const level = (w) => (OPT.importance_levels[w] ? `${OPT.importance_levels[w]} ` : "");
+  const items = Object.entries(OPT.score_categories).map(([key, c]) => {
+    const w = r.settings.weights[key];
+    return w
+      ? `<li><b>${esc(c.label)}</b> · ${esc(level(w))}${w}점 — ${esc(c.logic.replace("중요도", `${w}점`))}</li>`
+      : `<li><b>${esc(c.label)}</b> · 상관없음 — 점수에 반영하지 않아요</li>`;
+  });
+  const plus = bonusRules.filter((x) => x.points > 0).length;
+  const minus = bonusRules.filter((x) => x.points < 0).length;
+  return `<div class="score-guide">
+    <p class="guide-title">점수는 이렇게 매겨요</p>
+    <p>추천 점수 = <b>항목별 점수의 합</b> + <b>추가 점수</b> − <b>감점</b> (100점 만점으로 바꾸지 않고 그대로 더해요)</p>
+    <ul>${items.join("")}</ul>
+    <p class="guide-sub">점수에 영향을 주는 것</p>
+    <ul>
+      <li><b>중요도</b>: 왼쪽 ‘중요도’에서 항목마다 상관없음 0 · 낮음 5 · 보통 10 · 중요 15 · 매우 중요 20점으로 정해요. 관심사는 겹친 개수만큼 곱해져요.</li>
+      <li><b>추가 점수 / 감점</b>: 내가 정한 규칙에 해당하면 +5~20 / −5~20점 (지금 추가 ${plus}개 · 감점 ${minus}개)</li>
+      <li><b>쌍방 모드</b>: ${
+        r.settings.mutual
+          ? "켜짐 — (내 기준 점수 + 상대 기준 점수) ÷ 2. 상대가 정한 중요도·추가 점수도 반영돼요."
+          : "꺼짐 — 내 기준 점수만 봐요. 켜면 상대 기준 점수와 평균을 내요."
+      }</li>
+      <li><b>정보 미입력</b>: 둘 중 한 명이라도 입력하지 않은 항목은 0점이에요.</li>
+      <li><b>자기소개 유사도</b>: 두 사람 글을 벡터(좌표)로 바꿔 비교해요. 40% 이상이면 ‘비슷함’이에요.</li>
+      <li><b>거르기</b>는 점수와 별개예요. 절대조건에 걸리면 점수가 높아도 제외돼요 (상대 조건도 검사).</li>
+      <li><b>동점</b>이면 인증 회원 → 나이 차이가 적은 사람이 먼저예요.</li>
+    </ul>
+  </div>`;
 }
 
 function renderWhy(r) {
@@ -535,7 +568,13 @@ async function sendLike() {
       body: JSON.stringify({ from_id: me.id, to_id: likeTarget, message: $("#likeMessage").value }),
     });
     $("#likeModal").hidden = true;
-    toast(res.matched ? "🎉 매칭됐어요! 채팅 탭에서 대화해 보세요" : "좋아요를 보냈어요");
+    toast(
+      res.auto
+        ? "🎉 상대도 바로 좋아요를 돌려줘서 매칭됐어요! 채팅 탭에서 대화해 보세요"
+        : res.matched
+          ? "🎉 매칭됐어요! 채팅 탭에서 대화해 보세요"
+          : "좋아요를 보냈어요"
+    );
     await loadInbox();
     run();
     if (res.matched && !$("#view-chat").hidden) openChat(likeTarget);
@@ -552,10 +591,19 @@ async function openChat(otherId) {
   chatTimer = setInterval(() => refreshChat(false), 3000); // 상대 메시지를 3초마다 확인
 }
 
+let typingUntil = 0; // 가상 인물이 '입력 중…'인 동안 (자동 답장을 잠깐 뒤에 보여 준다)
+
 async function refreshChat(scroll) {
   if (!chatWith || $("#view-chat").hidden) return;
   const data = await api(`/api/chats/${me.id}/${chatWith}`);
-  const body = data.messages
+  let shown = data.messages;
+  const typing = Date.now() < typingUntil;
+  if (typing) {
+    // 내 마지막 메시지 뒤에 온 상대 답장은 '입력 중…'이 끝날 때까지 숨긴다
+    const lastMine = shown.map((m) => m.from).lastIndexOf(me.id);
+    shown = shown.slice(0, lastMine + 1);
+  }
+  const body = shown
     .map((m) => {
       const mine = m.from === me.id;
       const time = m.at.slice(5, 16).replace("T", " ");
@@ -568,9 +616,12 @@ async function refreshChat(scroll) {
   const draft = room.querySelector("textarea")?.value ?? "";
   room.innerHTML = `
     <div class="chat-head">${avatar(data.with)}
-      <div class="grow"><b>${esc(data.with.name)}</b><div class="meta">${data.with.age}세 · ${esc(data.with.region)} · ${esc(data.with.occupation)}</div></div>
+      <div class="grow"><b>${esc(data.with.name)}</b>${data.with.bot ? ' <span class="bot-badge">가상 인물 · 자동 답장</span>' : ""}
+        <div class="meta">${data.with.age}세 · ${esc(data.with.region)} · ${esc(data.with.occupation)}</div></div>
       <button class="btn tiny ghost" id="blockBtn">차단</button></div>
-    <div class="chat-body">${body || '<div class="chat-empty">매칭됐어요! 먼저 인사해 보세요 👋</div>'}</div>
+    <div class="chat-body">${body || '<div class="chat-empty">매칭됐어요! 먼저 인사해 보세요 👋</div>'}${
+      typing ? '<div class="bubble theirs typing"><span></span><span></span><span></span></div>' : ""
+    }</div>
     <form class="chat-input" id="chatForm"><textarea rows="1" maxlength="500" placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)"></textarea>
       <button class="btn primary">전송</button></form>`;
   const ta = room.querySelector("textarea");
@@ -589,10 +640,18 @@ async function refreshChat(scroll) {
     const text = ta.value.trim();
     if (!text) return;
     try {
-      await api(`/api/chats/${chatWith}`, { method: "POST", body: JSON.stringify({ sender_id: me.id, text }) });
+      const sent = await api(`/api/chats/${chatWith}`, { method: "POST", body: JSON.stringify({ sender_id: me.id, text }) });
       ta.value = "";
-      await refreshChat(true);
-      loadInbox();
+      if (sent.auto_reply) {
+        // 가상 인물: 1~2.5초 동안 '입력 중…'을 보여 준 뒤 답장을 띄운다 (답장 자체는 이미 저장됨)
+        const delay = 1000 + Math.min(1500, text.length * 40);
+        typingUntil = Date.now() + delay;
+        await refreshChat(true);
+        setTimeout(() => refreshChat(true).then(loadInbox), delay + 50); // 목록도 답장이 보인 뒤에 갱신
+      } else {
+        await refreshChat(true);
+        loadInbox();
+      }
     } catch (err) {
       toast(err.message);
     }
@@ -607,7 +666,7 @@ async function refreshChat(scroll) {
     await loadInbox();
     run();
   });
-  if (data.messages.some((m) => m.to === me.id)) loadInbox(); // 읽음 처리 반영
+  if (!typing && data.messages.some((m) => m.to === me.id)) loadInbox(); // 읽음 처리 반영 (입력 중엔 답장이 미리 보이지 않게 건너뜀)
 }
 
 function showTab(name) {

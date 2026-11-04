@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from matcher import persist, textrules  # noqa: E402
+from matcher import autoreply, persist, textrules  # noqa: E402
 from matcher.avatar import avatar_svg  # noqa: E402
 from matcher.models import Dealbreaker, Profile  # noqa: E402
 from matcher.pipeline import recommend  # noqa: E402
@@ -67,8 +67,21 @@ def main(out: str):
 
     avatars = [{"seed": s, "gender": g, "svg": avatar_svg(s, g)} for s in ("1-김민준", "abc", "7f3a9", "2-이도현") for g in ("남성", "여성", None)]
 
-    Path(out).write_text(json.dumps({"cases": cases, "parses": parses, "avatars": avatars}, ensure_ascii=False), encoding="utf-8")
-    print(f"기준값 {len(cases)}개 추천 · {len(parses)}개 문장 · {len(avatars)}개 캐릭터 → {out}")
+    # 가상 인물 자동 답장 (같은 메시지·같은 차례 → 같은 답)
+    by_id = {p.id: p for p in people}
+    chat_texts = ["안녕하세요!", "주말에 뭐 하세요?", "등산 좋아하세요?", "게임도 하세요?", "MBTI가 뭐예요?", "몇 살이세요?",
+                  "무슨 일 하세요?", "어디 사세요?", "술 좋아하세요?", "담배 피우세요?", "어떤 연애 원하세요?", "이번 주말에 만날래요?",
+                  "사진 예쁘시네요", "고마워요", "ㅋㅋㅋ", "오늘 날씨 좋네요", "잘 자요"]
+    replies = []
+    for bot in (11, 19, 45, 3, 30, 52):
+        for partner in (1, 14, 20, 58):
+            for turn, text in enumerate(chat_texts):
+                replies.append({"bot": bot, "partner": partner, "turn": turn, "text": text,
+                                "reply": autoreply.reply(by_id[bot], by_id[partner], text, turn)})
+            replies.append({"bot": bot, "partner": partner, "turn": 0, "text": None, "reply": autoreply.opener(by_id[bot], by_id[partner], 0)})
+
+    Path(out).write_text(json.dumps({"cases": cases, "parses": parses, "avatars": avatars, "replies": replies}, ensure_ascii=False), encoding="utf-8")
+    print(f"기준값 {len(cases)}개 추천 · {len(parses)}개 문장 · {len(avatars)}개 캐릭터 · {len(replies)}개 자동 답장 → {out}")
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-from matcher import avatar, persist, textrules  # noqa: E402
+from matcher import autoreply, avatar, persist, textrules  # noqa: E402
 from matcher import config as C  # noqa: E402
 
 STATIC = ROOT / "app" / "static"
@@ -52,6 +52,7 @@ def engine_config() -> dict:
         "MAX_BONUS_RULES": C.MAX_BONUS_RULES,
         "CANDIDATE_TOP_K": C.CANDIDATE_TOP_K,
         "DEFAULT_TOP_N": C.DEFAULT_TOP_N,
+        "AUTOREPLY": autoreply.RULES,
         "TEXTRULES": {"NEGATIVE": textrules.NEGATIVE, "REQUIRE": textrules.REQUIRE, "RELIGION_WORDS": textrules.RELIGION_WORDS},
         "AVATAR": {
             "BACKGROUNDS": avatar.BACKGROUNDS,

@@ -256,23 +256,61 @@ def test_like_back_creates_match_and_chat(client):
     assert res.status_code == 403
 
     res = client.post("/api/likes", json={"from_id": 1, "to_id": 11, "message": "반가워요!"})
-    assert res.json() == {"matched": True}
+    assert res.json() == {"matched": True, "auto": False}  # 서연님이 먼저 좋아요를 보냈으므로 자동이 아님
 
-    # 서로 보낸 한마디가 채팅방 첫 메시지로 들어간다
+    # 서로 보낸 한마디가 채팅방 첫 메시지로 들어가고, 가상 인물(서연)이 내 한마디에 자동으로 답한다
     msgs = client.get("/api/chats/1/11").json()["messages"]
     assert [m["text"] for m in msgs][0].startswith("안녕하세요! 주말에 등산")
-    assert msgs[-1]["text"] == "반가워요!"
+    assert msgs[-2]["text"] == "반가워요!"
+    assert msgs[-1]["from"] == 11 and msgs[-1]["text"]
 
-    assert client.post("/api/chats/1", json={"sender_id": 11, "text": "주말에 시간 되세요?"}).status_code == 200
+    res = client.post("/api/chats/1", json={"sender_id": 11, "text": "주말에 시간 되세요?"})
+    assert res.status_code == 200 and res.json()["auto_reply"] is True  # 받는 1번도 가상 인물
     inbox = client.get("/api/users/1/inbox").json()
-    assert inbox["matches"][0]["id"] == 11 and inbox["matches"][0]["unread"] == 1
+    assert inbox["matches"][0]["id"] == 11 and inbox["matches"][0]["unread"] == 1  # 위에서 대화를 열어 봐서 앞 메시지는 읽음
 
 
 def test_one_sided_like_is_not_match(client):
-    res = client.post("/api/likes", json={"from_id": 2, "to_id": 17})
-    assert res.json() == {"matched": False}
-    assert client.post("/api/likes", json={"from_id": 2, "to_id": 17}).status_code == 400  # 중복
+    # 직접 가입한 사람(가상 인물 아님)은 좋아요를 자동으로 돌려주지 않는다
+    new = client.post("/api/profiles", json={"name": "새회원", "gender": "여성", "education": "대졸",
+                                             "occupation": "개발자", "age": 29, "city": "서울"}).json()
+    res = client.post("/api/likes", json={"from_id": 2, "to_id": new["id"]})
+    assert res.json() == {"matched": False, "auto": False}
+    assert client.post("/api/likes", json={"from_id": 2, "to_id": new["id"]}).status_code == 400  # 중복
     assert client.post("/api/likes", json={"from_id": 2, "to_id": 2}).status_code == 400  # 자기 자신
+
+
+def test_bot_likes_back_and_greets(client):
+    new = client.post("/api/profiles", json={"name": "새회원", "gender": "남성", "education": "대졸",
+                                             "occupation": "개발자", "age": 29, "city": "서울"}).json()
+    res = client.post("/api/likes", json={"from_id": new["id"], "to_id": 17})
+    assert res.json() == {"matched": True, "auto": True}
+    msgs = client.get(f"/api/chats/{new['id']}/17").json()["messages"]
+    assert len(msgs) == 1 and msgs[0]["from"] == 17 and "새회원님" in msgs[0]["text"]  # 가상 인물이 먼저 인사
+
+
+def test_bot_replies_by_profile(client):
+    new = client.post("/api/profiles", json={"name": "새회원", "gender": "남성", "education": "대졸", "occupation": "개발자",
+                                             "age": 29, "city": "서울", "interests": ["등산"], "mbti": "ENFP"}).json()
+    client.post("/api/likes", json={"from_id": new["id"], "to_id": 11, "message": "안녕하세요!"})
+    replies = {}
+    for text in ["MBTI가 뭐예요?", "몇 살이세요?", "주말에 만날래요?", "등산 좋아하세요?", "무슨 일 하세요?"]:
+        res = client.post("/api/chats/11", json={"sender_id": new["id"], "text": text}).json()
+        assert res["auto_reply"] is True
+        replies[text] = client.get(f"/api/chats/{new['id']}/11").json()["messages"][-1]["text"]
+    # 이서연(11): INFP · 26세 · UX 디자이너 · 맛집·카페 데이트 · 관심사에 등산
+    assert "INFP" in replies["MBTI가 뭐예요?"] and "ENFP" in replies["MBTI가 뭐예요?"]
+    assert "26살" in replies["몇 살이세요?"]
+    assert "카페" in replies["주말에 만날래요?"]
+    assert "등산 저도 정말 좋아해요" in replies["등산 좋아하세요?"]
+    assert "UX 디자이너" in replies["무슨 일 하세요?"]
+
+
+def test_korean_particles():
+    from matcher.autoreply import eun, rang
+
+    assert eun("등산") == "등산은" and eun("카페") == "카페는"
+    assert rang("영화") == "영화랑" and rang("등산") == "등산이랑"
 
 
 def test_block_removes_chat_and_recommendation(client):
@@ -513,7 +551,8 @@ def test_web_version_is_up_to_date(tmp_path):
     for name in ("index.html", "static/app.js", "static/style.css", "static/local-api.js", "static/web-data.json", ".nojekyll"):
         assert filecmp.cmp(fresh / name, root / "docs" / name, shallow=False), f"docs/{name} 가 오래됐어요 → python scripts/build_pages.py"
     # 저장소 맨 위 index.html: 앱 전체가 든 한 파일 (원카드처럼 이 파일 하나로 열림)
-    assert (root / "index.html").read_text(encoding="utf-8") == build_pages.standalone_html(fresh), "index.html 이 오래됐어요 → python scripts/build_pages.py"
+    same = (root / "index.html").read_text(encoding="utf-8") == build_pages.standalone_html(fresh)
+    assert same, "index.html 이 오래됐어요 → python scripts/build_pages.py"
     assert (root / ".nojekyll").exists()
 
 
@@ -561,7 +600,7 @@ def test_pyodide_api_errors_are_korean(web_api):
 
 
 def test_pyodide_api_saves_to_files(web_api, tmp_path):
-    assert _call(web_api, "POST", "/api/likes", {"from_id": 1, "to_id": 11})["data"] == {"matched": True}
+    assert _call(web_api, "POST", "/api/likes", {"from_id": 1, "to_id": 11})["data"] == {"matched": True, "auto": False}
     import json
 
     likes = json.loads((tmp_path / "social.json").read_text(encoding="utf-8"))["likes"]
@@ -576,6 +615,5 @@ def test_pyodide_single_file_is_up_to_date():
     sys.path.insert(0, str(root / "scripts"))
     import build_pyodide
 
-    assert (root / "web" / "dist" / "index.html").read_text(encoding="utf-8") == build_pyodide.build_html(), (
-        "web/dist/index.html 이 오래됐어요 → python scripts/build_pyodide.py"
-    )
+    same = (root / "web" / "dist" / "index.html").read_text(encoding="utf-8") == build_pyodide.build_html()
+    assert same, "web/dist/index.html 이 오래됐어요 → python scripts/build_pyodide.py"
